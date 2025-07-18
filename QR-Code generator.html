@@ -7,43 +7,52 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         #controls {
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             font-family: Arial, sans-serif;
         }
         #controls label {
-            margin-right: 10px;
+            margin-right: 15px;
         }
         #canvas-container {
             position: relative;
+            width: 600px; /* Larger preview window */
+            height: 600px; /* Larger preview window */
+            border: 1px solid #ccc;
         }
-        #qr-canvas {
-            border: 1px solid black;
+        #qr-svg {
+            width: 100%;
+            height: 100%;
         }
         button {
             margin: 5px;
-            padding: 5px 10px;
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+        #logo-upload {
+            border: 2px dashed #ccc;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            background-color: #f9f9f9;
+        }
+        #logo-upload.dragover {
+            border-color: #000;
+            background-color: #e0e0e0;
         }
     </style>
 </head>
 <body>
     <div id="controls">
-        <label>QR Data: <input type="text" id="qr-data" placeholder="Enter URL or text"></label><br>
-        <label>Logo: <input type="file" id="logo-upload" accept="image/*"></label><br>
+        <label>QR Data: <input type="text" id="qr-data" placeholder="Enter URL or text" style="width: 300px;"></label><br>
+        <div id="logo-upload">Drag and drop logo here (.png, .jpg, .svg) or click to upload</div><br>
         <label>Logo X: <input type="number" id="logo-x" value="0" step="10"></label>
         <label>Logo Y: <input type="number" id="logo-y" value="0" step="10"></label>
         <label>Scale: <input type="number" id="logo-scale" value="1" step="0.1" min="0.1" max="5"></label><br>
-        <label>Shape:
-            <input type="radio" name="shape" value="rectangle" checked> Rectangle
-            <input type="radio" name="shape" value="circle"> Circle
-        </label><br>
-        <label><input type="checkbox" id="randomize-size"> Randomize Size</label>
-        <label><input type="checkbox" id="randomize-rotation"> Randomize Rotation (Rectangles)</label><br>
         <button id="generate-btn">Generate QR Code</button>
-        <button id="brush-btn">Brush Mode</button>
-        <button id="clear-shrinks">Clear Shrinks</button>
+        <button id="download-btn">Download SVG</button>
     </div>
     <div id="canvas-container">
-        <canvas id="qr-canvas"></canvas>
+        <div id="qr-svg"></div>
     </div>
     <script>
         // Element references
@@ -53,169 +62,138 @@
         const logoYInput = document.getElementById('logo-y');
         const logoScaleInput = document.getElementById('logo-scale');
         const generateBtn = document.getElementById('generate-btn');
-        const brushBtn = document.getElementById('brush-btn');
-        const clearShrinksBtn = document.getElementById('clear-shrinks');
-        const canvas = document.getElementById('qr-canvas');
-        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('download-btn');
+        const qrSvgContainer = document.getElementById('qr-svg');
 
         // Variables
         let logoImg = null;
         let qrMatrix = null;
-        let shrinkMatrix = null;
         let N = 0;
         const moduleSize = 10; // Pixels per module
-        let isBrushMode = false;
-        let isBrushing = false;
 
-        // Event listeners for logo upload
-        logoUpload.addEventListener('change', function() {
-            const file = this.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    logoImg = new Image();
-                    logoImg.onload = drawCanvas;
-                    logoImg.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
+        // Drag-and-Drop and Click Upload for Logo
+        logoUpload.addEventListener('click', function() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.png,.jpg,.jpeg,.svg';
+            input.onchange = function(e) {
+                handleFile(e.target.files[0]);
+            };
+            input.click();
+        });
+
+        logoUpload.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('dragover');
+        });
+
+        logoUpload.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+        });
+
+        logoUpload.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            const validTypes = ['image/png', 'image/jpeg', 'image/svg+xml'];
+            if (file && validTypes.includes(file.type)) {
+                handleFile(file);
             } else {
-                logoImg = null;
-                drawCanvas();
+                alert('Please drop a .png, .jpg, or .svg file.');
             }
         });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                logoImg = new Image();
+                logoImg.onload = drawSvg;
+                logoImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
 
         // Event listeners for controls
         [logoXInput, logoYInput, logoScaleInput].forEach(input => {
-            input.addEventListener('input', drawCanvas);
+            input.addEventListener('input', drawSvg);
         });
-        document.querySelectorAll('input[name="shape"]').forEach(radio => {
-            radio.addEventListener('change', drawCanvas);
-        });
-        document.getElementById('randomize-size').addEventListener('change', drawCanvas);
-        document.getElementById('randomize-rotation').addEventListener('change', drawCanvas);
+
         generateBtn.addEventListener('click', generateQR);
-        brushBtn.addEventListener('click', function() {
-            isBrushMode = !isBrushMode;
-            this.textContent = isBrushMode ? 'Exit Brush Mode' : 'Brush Mode';
-        });
-        clearShrinksBtn.addEventListener('click', clearShrinks);
+        downloadBtn.addEventListener('click', downloadSvg);
 
-        // Canvas event listeners for brushing
-        canvas.addEventListener('mousedown', startBrushing);
-        canvas.addEventListener('mousemove', brush);
-        canvas.addEventListener('mouseup', stopBrushing);
-        canvas.addEventListener('mouseleave', stopBrushing);
+        // Render QR Code as SVG on text input
+        qrDataInput.addEventListener('input', generateQR);
 
-        // Draw function
-        function drawCanvas() {
-            const logoX = parseFloat(logoXInput.value) || 0;
-            const logoY = parseFloat(logoYInput.value) || 0;
-            const logoScale = parseFloat(logoScaleInput.value) || 1;
-            const shape = document.querySelector('input[name="shape"]:checked').value;
-            const randomizeSize = document.getElementById('randomize-size').checked;
-            const randomizeRotation = shape === 'rectangle' && document.getElementById('randomize-rotation').checked;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw logo if uploaded
-            if (logoImg) {
-                const w = logoImg.width * logoScale;
-                const h = logoImg.height * logoScale;
-                ctx.drawImage(logoImg, logoX, logoY, w, h);
-            }
-
-            // Draw QR Code if generated
-            if (qrMatrix) {
-                ctx.fillStyle = 'black';
-                for (let row = 0; row < N; row++) {
-                    for (let col = 0; col < N; col++) {
-                        if (qrMatrix[row][col]) { // Black module
-                            let size = moduleSize;
-                            if (randomizeSize) {
-                                size *= 0.5 + Math.random() * 0.5; // 50% to 100%
-                            }
-                            if (shrinkMatrix[row][col]) {
-                                size *= 0.5; // Shrink to 50%
-                            }
-                            const x = col * moduleSize + moduleSize / 2;
-                            const y = row * moduleSize + moduleSize / 2;
-
-                            if (shape === 'rectangle') {
-                                let rotation = 0;
-                                if (randomizeRotation) {
-                                    rotation = (Math.random() - 0.5) * Math.PI / 2; // -45 to 45 degrees
-                                }
-                                ctx.save();
-                                ctx.translate(x, y);
-                                ctx.rotate(rotation);
-                                ctx.fillRect(-size / 2, -size / 2, size, size);
-                                ctx.restore();
-                            } else if (shape === 'circle') {
-                                ctx.beginPath();
-                                ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
-                                ctx.fill();
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Generate QR Code
+        // Generate QR Code Matrix
         function generateQR() {
             const data = qrDataInput.value.trim();
             if (!data) {
-                alert('Please enter data for the QR Code');
+                qrSvgContainer.innerHTML = '';
                 return;
             }
             const qr = new QRCode(-1, QRCode.CorrectLevel.H); // Auto version, high error correction
             qr.addData(data);
             qr.make();
             N = qr.getModuleCount();
-            canvas.width = moduleSize * N;
-            canvas.height = moduleSize * N;
             qrMatrix = Array(N).fill().map(() => Array(N).fill(false));
             for (let row = 0; row < N; row++) {
                 for (let col = 0; col < N; col++) {
                     qrMatrix[row][col] = qr.isDark(row, col);
                 }
             }
-            shrinkMatrix = Array(N).fill().map(() => Array(N).fill(false));
-            drawCanvas();
+            drawSvg();
         }
 
-        // Brushing functions
-        function startBrushing(e) {
-            if (isBrushMode) {
-                isBrushing = true;
-                brush(e);
-            }
-        }
+        // Draw SVG
+        function drawSvg() {
+            if (!qrMatrix) return;
 
-        function stopBrushing() {
-            isBrushing = false;
-        }
+            const logoX = parseFloat(logoXInput.value) || 0;
+            const logoY = parseFloat(logoYInput.value) || 0;
+            const logoScale = parseFloat(logoScaleInput.value) || 1;
 
-        function brush(e) {
-            if (isBrushing && qrMatrix) {
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const row = Math.floor(y / moduleSize);
-                const col = Math.floor(x / moduleSize);
-                if (row >= 0 && row < N && col >= 0 && col < N) {
-                    shrinkMatrix[row][col] = true;
-                    drawCanvas();
+            let svgContent = `<svg width="${moduleSize * N}" height="${moduleSize * N}" xmlns="http://www.w3.org/2000/svg">`;
+
+            // Draw QR Code
+            for (let row = 0; row < N; row++) {
+                for (let col = 0; col < N; col++) {
+                    if (qrMatrix[row][col]) { // Black module
+                        const x = col * moduleSize;
+                        const y = row * moduleSize;
+                        svgContent += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="black" />`;
+                    }
                 }
             }
+
+            // Draw logo if uploaded
+            if (logoImg) {
+                const w = logoImg.width * logoScale;
+                const h = logoImg.height * logoScale;
+                svgContent += `<image href="${logoImg.src}" x="${logoX}" y="${logoY}" width="${w}" height="${h}" />`;
+            }
+
+            svgContent += `</svg>`;
+            qrSvgContainer.innerHTML = svgContent;
         }
 
-        // Clear shrinks
-        function clearShrinks() {
-            if (shrinkMatrix) {
-                shrinkMatrix.forEach(row => row.fill(false));
-                drawCanvas();
+        // Download SVG
+        function downloadSvg() {
+            const svgData = qrSvgContainer.innerHTML;
+            if (!svgData) {
+                alert('Please generate a QR code first!');
+                return;
             }
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'qr-code.svg';
+            a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
