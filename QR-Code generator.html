@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Generator</title>
+  <title>QR Code Generator with Brush Tool</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
     body {
@@ -100,7 +100,7 @@
       margin-bottom: 5px;
       color: #666;
     }
-    input[type="range"], select {
+    input[type="range"], select, input[type="color"] {
       width: 100%;
       padding: 5px;
       border-radius: 5px;
@@ -165,9 +165,9 @@
             <input type="checkbox" id="smooth-corners">
             <label for="smooth-corners">Smooth Corners</label>
           </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="transparent-corners">
-            <label for="transparent-corners">Transparent Corners</label>
+          <div class="control-group">
+            <label for="roundness">Corner Roundness: <span class="slider-value" id="roundness-value">0.5</span></label>
+            <input type="range" id="roundness" min="0" max="1" step="0.1" value="0.5">
           </div>
         </div>
       </div>
@@ -192,7 +192,7 @@
           </div>
           <div class="control-group">
             <label for="rotation-speed">Rotation Speed: <span class="slider-value" id="rotation-speed-value">0°</span></label>
-            <input type="range" id="rotation-speed" min="-10" max="10" step="0.5" value="0">
+            <input type="range" id="rotation-speed" min="-1" max="1" step="0.1" value="0">
           </div>
           <div class="control-group checkbox-group">
             <input type="checkbox" id="lock-scale">
@@ -218,6 +218,10 @@
             <input type="checkbox" id="jitter-color">
             <label for="jitter-color">Jitter Color</label>
           </div>
+          <div class="control-group">
+            <label for="jitter-color-picker">Jitter Base Color</label>
+            <input type="color" id="jitter-color-picker" value="#000000">
+          </div>
         </div>
         <div class="button-group">
           <button id="brush-toggle">Enable Brush</button>
@@ -226,6 +230,8 @@
           <button id="reset-scale-btn">Reset Scale</button>
           <button id="reset-transparency-btn">Reset Transparency</button>
           <button id="reset-all-btn">Reset All</button>
+          <button id="undo-btn">Undo</button>
+          <button id="redo-btn">Redo</button>
         </div>
       </div>
     </div>
@@ -241,7 +247,7 @@
     const scaleSlider = document.getElementById('scale-slider');
     const errorCorrection = document.getElementById('error-correction');
     const smoothCorners = document.getElementById('smooth-corners');
-    const transparentCorners = document.getElementById('transparent-corners');
+    const roundnessSlider = document.getElementById('roundness');
     const brushRadius = document.getElementById('brush-radius');
     const brushStrength = document.getElementById('brush-strength');
     const brushIntensity = document.getElementById('brush-intensity');
@@ -253,12 +259,15 @@
     const jitterScale = document.getElementById('jitter-scale');
     const jitterRotation = document.getElementById('jitter-rotation');
     const jitterColor = document.getElementById('jitter-color');
+    const jitterColorPicker = document.getElementById('jitter-color-picker');
     const brushToggle = document.getElementById('brush-toggle');
     const resetRotationBtn = document.getElementById('reset-rotation-btn');
     const resetColorsBtn = document.getElementById('reset-colors-btn');
     const resetScaleBtn = document.getElementById('reset-scale-btn');
     const resetTransparencyBtn = document.getElementById('reset-transparency-btn');
     const resetAllBtn = document.getElementById('reset-all-btn');
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
@@ -272,8 +281,11 @@
     let logoBounds = null;
     let logoSVGCode = null;
     let brushedModules = new Map();
-    let brushEnabled = false;
+    let history = [];
+    let historyIndex = -1;
     let isBrushing = false;
+    let brushEnabled = false;
+    let selectedJitterColor = '#000000';
 
     scaleSlider.addEventListener('input', () => {
       document.getElementById('scale-slider-value').textContent = scaleSlider.value;
@@ -292,6 +304,9 @@
     });
     rotationSpeed.addEventListener('input', () => {
       document.getElementById('rotation-speed-value').textContent = `${rotationSpeed.value}°`;
+    });
+    roundnessSlider.addEventListener('input', () => {
+      document.getElementById('roundness-value').textContent = roundnessSlider.value;
     });
 
     uploadArea.addEventListener('click', () => logoUpload.click());
@@ -358,6 +373,8 @@
         qrCode.addData(qrText.value);
         qrCode.make();
         brushedModules.clear();
+        history = [];
+        historyIndex = -1;
         drawPreview();
       } else {
         qrCode = null;
@@ -367,7 +384,10 @@
     qrText.addEventListener('input', generateQRCode);
     errorCorrection.addEventListener('change', generateQRCode);
     smoothCorners.addEventListener('change', drawPreview);
-    transparentCorners.addEventListener('change', drawPreview);
+    roundnessSlider.addEventListener('input', () => {
+      document.getElementById('roundness-value').textContent = roundnessSlider.value;
+      drawPreview();
+    });
 
     function getModuleProperties(i, j) {
       const key = `${i},${j}`;
@@ -389,9 +409,10 @@
         const moduleSize = canvasSize / n;
 
         if (smoothCorners.checked) {
-          drawPositionPatternCanvas(0, 0, moduleSize, transparentCorners.checked);
-          drawPositionPatternCanvas(0, n - 7, moduleSize, transparentCorners.checked);
-          drawPositionPatternCanvas(n - 7, 0, moduleSize, transparentCorners.checked);
+          const roundness = parseFloat(roundnessSlider.value);
+          drawPositionPatternCanvas(0, 0, moduleSize, roundness);
+          drawPositionPatternCanvas(0, n - 7, moduleSize, roundness);
+          drawPositionPatternCanvas(n - 7, 0, moduleSize, roundness);
         }
 
         for (let i = 0; i < n; i++) {
@@ -421,27 +442,31 @@
       }
     }
 
-    function drawPositionPatternCanvas(row, col, moduleSize, transparent) {
+    function drawPositionPatternCanvas(row, col, moduleSize, roundness) {
       const x = col * moduleSize;
       const y = row * moduleSize;
-      const radius = moduleSize * 0.75;
-      const maxTransparency = parseFloat(brushTransparency.value);
-      const transparencyValue = transparent ? maxTransparency : 0;
-      ctx.fillStyle = `rgba(0,0,0,${1 - transparencyValue})`;
-      drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, radius);
-      ctx.fillStyle = `rgba(255,255,255,${1 - transparencyValue})`;
-      drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, radius / 1.25);
-      ctx.fillStyle = `rgba(0,0,0,${1 - transparencyValue})`;
-      drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, radius / 2);
+      const outerRadius = roundness * (moduleSize * 3.5);
+      const middleRadius = roundness * (moduleSize * 2.5);
+      const innerRadius = roundness * (moduleSize * 1.5);
+      ctx.fillStyle = 'black';
+      drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, outerRadius);
+      ctx.fillStyle = 'white';
+      drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, middleRadius);
+      ctx.fillStyle = 'black';
+      drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, innerRadius);
     }
 
     function drawRoundedRect(ctx, x, y, width, height, radius) {
       ctx.beginPath();
       ctx.moveTo(x + radius, y);
-      ctx.arcTo(x + width, y, x + width, y + height, radius);
-      ctx.arcTo(x + width, y + height, x, y + height, radius);
-      ctx.arcTo(x, y + height, x, y, radius);
-      ctx.arcTo(x, y, x + width, y, radius);
+      ctx.lineTo(x + width - radius, y);
+      ctx.arcTo(x + width, y, x + width, y + radius, radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+      ctx.lineTo(x + radius, y + height);
+      ctx.arcTo(x, y + height, x, y + height - radius, radius);
+      ctx.lineTo(x, y + radius);
+      ctx.arcTo(x, y, x + radius, y, radius);
       ctx.closePath();
       ctx.fill();
     }
@@ -482,7 +507,12 @@
     });
 
     qrCanvas.addEventListener('mouseup', () => {
-      isBrushing = false;
+      if (isBrushing) {
+        history = history.slice(0, historyIndex + 1);
+        history.push(new Map(brushedModules));
+        historyIndex++;
+        isBrushing = false;
+      }
     });
 
     function applyBrush(event) {
@@ -529,7 +559,7 @@
               if (!lockRotation.checked && rotationDelta !== 0) {
                 current.rotation += rotationDelta * feather;
                 if (jitterRotation.checked) {
-                  current.rotation += (Math.random() - 0.5) * 4 * feather;
+                  current.rotation += (Math.random() - 0.5) * 10 * feather;
                 }
               }
 
@@ -585,6 +615,22 @@
       drawPreview();
     });
 
+    undoBtn.addEventListener('click', () => {
+      if (historyIndex > 0) {
+        historyIndex--;
+        brushedModules = new Map(history[historyIndex]);
+        drawPreview();
+      }
+    });
+
+    redoBtn.addEventListener('click', () => {
+      if (historyIndex < history.length - 1) {
+        historyIndex++;
+        brushedModules = new Map(history[historyIndex]);
+        drawPreview();
+      }
+    });
+
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -619,12 +665,13 @@
       }
 
       if (smoothCorners.checked) {
-        const radius = moduleSize * 0.75;
-        const transparency = parseFloat(brushTransparency.value);
-        const cornerTransparency = transparentCorners.checked ? transparency : 0;
-        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius, cornerTransparency);
-        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, radius, cornerTransparency);
-        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius, cornerTransparency);
+        const roundness = parseFloat(roundnessSlider.value);
+        const outerRadius = roundness * (moduleSize * 3.5);
+        const middleRadius = roundness * (moduleSize * 2.5);
+        const innerRadius = roundness * (moduleSize * 1.5);
+        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, outerRadius, middleRadius, innerRadius);
+        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, outerRadius, middleRadius, innerRadius);
+        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, outerRadius, middleRadius, innerRadius);
       }
 
       for (let i = 0; i < n; i++) {
@@ -649,13 +696,13 @@
       return svg;
     }
 
-    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius, transparency) {
+    function drawSVGRoundedPositionPattern(row, col, moduleSize, outerRadius, middleRadius, innerRadius) {
       const x = col * moduleSize;
       const y = row * moduleSize;
       let svg = '';
-      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius}"/>`;
-      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" fill-opacity="${1 - transparency}" rx="${radius / 1.25}"/>`;
-      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius / 2}"/>`;
+      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" rx="${outerRadius}"/>`;
+      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${middleRadius}"/>`;
+      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${innerRadius}"/>`;
       return svg;
     }
 
