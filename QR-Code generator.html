@@ -15,8 +15,8 @@
     #qr-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     #controls { margin: 10px 0; }
     #brush-tool { margin-top: 10px; }
-    #download-btn, #brush-toggle, #undo-btn, #redo-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
-    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover { background-color: #0056b3; }
+    #download-btn, #brush-toggle, #undo-btn, #redo-btn, #reset-random-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover, #reset-random-btn:hover { background-color: #0056b3; }
   </style>
 </head>
 <body>
@@ -45,7 +45,14 @@
         <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
         <label for="brush-intensity">Intensity/Speed:</label>
         <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.03">
+        <label for="brush-transparency">Max Transparency:</label>
+        <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
+        <label for="random-rotation">Random Rotation:</label>
+        <input type="checkbox" id="random-rotation">
+        <label for="random-scale">Random Scale:</label>
+        <input type="checkbox" id="random-scale">
         <button id="brush-toggle">Enable Brush</button>
+        <button id="reset-random-btn">Reset Randomization</button>
         <button id="undo-btn" disabled>Undo</button>
         <button id="redo-btn" disabled>Redo</button>
       </div>
@@ -64,7 +71,11 @@
     const brushRadius = document.getElementById('brush-radius');
     const brushStrength = document.getElementById('brush-strength');
     const brushIntensity = document.getElementById('brush-intensity');
+    const brushTransparency = document.getElementById('brush-transparency');
+    const randomRotation = document.getElementById('random-rotation');
+    const randomScale = document.getElementById('random-scale');
     const brushToggle = document.getElementById('brush-toggle');
+    const resetRandomBtn = document.getElementById('reset-random-btn');
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
     const previewContainer = document.getElementById('preview-container');
@@ -78,7 +89,7 @@
     let qrCode = null;
     let logoBounds = null;
     let logoSVGCode = null;
-    let brushedModules = new Map(); // { scale, transparency }
+    let brushedModules = new Map(); // { scale, transparency, rotation, randomScale }
     let brushHistory = [];
     let historyIndex = -1;
     let isBrushing = false;
@@ -161,10 +172,10 @@
     // Get module properties
     function getModuleProperties(i, j) {
       const moduleKey = `${i},${j}`;
-      return brushedModules.get(moduleKey) || { scale: 1, transparency: 0 };
+      return brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, randomScale: 1 };
     }
 
-    // Draw preview with per-pixel transparency and smooth corners
+    // Draw preview with per-pixel transparency, rotation, and scale
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -189,8 +200,8 @@
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
             if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-            const { scale, transparency } = getModuleProperties(i, j);
-            const size = moduleSize * scale;
+            const { scale, transparency, rotation, randomScale } = getModuleProperties(i, j);
+            const size = moduleSize * scale * randomScale;
             const offset = (moduleSize - size) / 2;
             const x = j * moduleSize + offset;
             const y = i * moduleSize + offset;
@@ -200,8 +211,13 @@
             const color = qrCode.isDark(i, j) ? '0,0,0' : '255,255,255';
             gradient.addColorStop(0, `rgba(${color},${transparency})`);
             gradient.addColorStop(1, `rgba(${color},1)`);
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(rotation * Math.PI / 180);
+            ctx.translate(-centerX, -centerY);
             ctx.fillStyle = gradient;
             ctx.fillRect(x, y, size, size);
+            ctx.restore();
           }
         }
       }
@@ -274,6 +290,7 @@
       const radius = parseInt(brushRadius.value);
       const intensity = parseFloat(brushIntensity.value);
       const minScale = parseFloat(brushStrength.value);
+      const maxTransparency = parseFloat(brushTransparency.value);
       const centerJ = Math.floor(x * n);
       const centerI = Math.floor(y * n);
       const maxDist = radius * radius;
@@ -286,19 +303,46 @@
             const dist = di * di + dj * dj;
             if (dist <= maxDist) {
               const moduleKey = `${i},${j}`;
-              const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0 };
+              const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, randomScale: 1 };
               const feather = 1 - (dist / maxDist);
-              const scaleReduction = intensity * feather;
-              const newScale = Math.max(minScale, current.scale - scaleReduction);
-              const transparencyIncrease = (1 - newScale) * feather;
-              const newTransparency = Math.min(1, current.transparency + transparencyIncrease);
-              brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency });
+              const delta = intensity * feather;
+              let newScale = current.scale;
+              if (current.scale > minScale) {
+                newScale = Math.max(minScale, current.scale - delta);
+              } else if (current.scale < minScale) {
+                newScale = Math.min(minScale, current.scale + delta);
+              }
+              const transparencyIncrease = delta;
+              const newTransparency = Math.min(maxTransparency, current.transparency + transparencyIncrease);
+              let newRotation = current.rotation;
+              let newRandomScale = current.randomScale;
+              if (randomRotation.checked) {
+                newRotation += (Math.random() - 0.5) * 10; // Random rotation between -5 and 5 degrees
+              }
+              if (randomScale.checked) {
+                newRandomScale *= (1 + (Math.random() - 0.5) * 0.1); // Random scale factor between 0.95 and 1.05
+              }
+              brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency, rotation: newRotation, randomScale: newRandomScale });
             }
           }
         }
       }
       drawPreview();
     }
+
+    // Reset randomization
+    resetRandomBtn.addEventListener('click', () => {
+      for (let [key, value] of brushedModules) {
+        value.rotation = 0;
+        value.randomScale = 1;
+        brushedModules.set(key, value);
+      }
+      brushHistory = brushHistory.slice(0, historyIndex + 1);
+      brushHistory.push(new Map(brushedModules));
+      historyIndex++;
+      updateUndoRedoButtons();
+      drawPreview();
+    });
 
     // Undo/Redo logic
     undoBtn.addEventListener('click', () => {
@@ -324,7 +368,7 @@
       redoBtn.disabled = historyIndex >= brushHistory.length - 1;
     }
 
-    // Download SVG with per-pixel transparency and smooth corners
+    // Download SVG with per-pixel transparency, rotation, and scale
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -368,18 +412,18 @@
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
           if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-          const { scale, transparency } = getModuleProperties(i, j);
-          const size = moduleSize * scale;
+          const { scale, transparency, rotation, randomScale } = getModuleProperties(i, j);
+          const size = moduleSize * scale * randomScale;
           const offset = (moduleSize - size) / 2;
           const x = j * moduleSize + offset;
           const y = i * moduleSize + offset;
           const color = qrCode.isDark(i, j) ? 'black' : 'white';
-          const gradientId = `${color}Gradient_${transparency.toFixed(2)}`;
+          const gradientId = `${color}Gradient_${i}_${j}`;
           svg += `<defs><radialGradient id="${gradientId}" cx="0.5" cy="0.5" r="0.5">
             <stop offset="0%" stop-color="${color}" stop-opacity="${transparency}"/>
             <stop offset="100%" stop-color="${color}" stop-opacity="1"/>
           </radialGradient></defs>`;
-          svg += `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#${gradientId})"/>`;
+          svg += `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#${gradientId})" transform="rotate(${rotation}, ${x + size / 2}, ${y + size / 2})"/>`;
         }
       }
       svg += '</svg>';
