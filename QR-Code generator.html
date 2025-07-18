@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code Generator</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -58,15 +58,6 @@
       width: 100%;
       height: 100%;
     }
-    #logo-container {
-      position: absolute;
-      cursor: move;
-      display: none;
-    }
-    #logo-image {
-      width: 100%;
-      height: 100%;
-    }
     #controls {
       margin: 10px 0;
     }
@@ -87,7 +78,7 @@
   <main>
     <input type="text" id="qr-text" placeholder="Enter text for QR code">
     <div id="upload-area">
-      <p>Drag and drop or click to upload logo</p>
+      <p>Drag and drop or click to upload logo (PNG, JPG, SVG)</p>
       <input type="file" id="logo-upload" accept="image/*">
     </div>
     <div id="controls">
@@ -96,55 +87,35 @@
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
-      <div id="logo-container">
-        <img id="logo-image" src="" alt="Logo">
-      </div>
     </div>
     <button id="download-btn">Download QR Code</button>
   </main>
   <script>
-    const qrCanvas = document.getElementById('qr-canvas');
     const qrText = document.getElementById('qr-text');
     const logoUpload = document.getElementById('logo-upload');
-    const logoImage = document.getElementById('logo-image');
     const scaleSlider = document.getElementById('scale-slider');
-    const logoContainer = document.getElementById('logo-container');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
+    const qrCanvas = document.getElementById('qr-canvas');
+    const ctx = qrCanvas.getContext('2d');
 
-    // Initialize QRious with dynamic size
-    let qr = new QRious({
-      element: qrCanvas,
-      value: '',
-      size: previewContainer.clientWidth,
-    });
+    let logoImage = new Image();
+    let logoScale = 1;
+    let qrCode = null;
 
-    // Update QR code when text changes
-    qrText.addEventListener('input', () => {
-      qr.value = qrText.value;
-    });
-
-    // Variables for logo handling
-    let initialWidth, initialHeight;
-    let isDragging = false;
-    let startX, startY;
-
-    // Handle file input logo upload
+    // Handle logo upload
     logoUpload.addEventListener('change', (event) => {
       const file = event.target.files[0];
-      if (file) {
-        loadLogo(file);
-      }
+      if (file) loadLogo(file);
     });
 
-    // Handle drag-and-drop
     uploadArea.addEventListener('dragover', (event) => {
       event.preventDefault();
       uploadArea.classList.add('dragover');
     });
 
-    uploadArea.addEventListener('dragleave', (event) => {
+    uploadArea.addEventListener('dragleave', () => {
       uploadArea.classList.remove('dragover');
     });
 
@@ -152,94 +123,120 @@
       event.preventDefault();
       uploadArea.classList.remove('dragover');
       const file = event.dataTransfer.files[0];
-      if (file && file.type.startsWith('image/')) {
-        loadLogo(file);
-      }
+      if (file && file.type.startsWith('image/')) loadLogo(file);
     });
 
-    // Load and position logo
     function loadLogo(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
+        logoImage.onload = drawPreview;
         logoImage.src = e.target.result;
-        logoImage.onload = () => {
-          initialWidth = logoImage.naturalWidth;
-          initialHeight = logoImage.naturalHeight;
-          const scale = 0.5; // Initial scale
-          logoContainer.style.width = `${initialWidth * scale}px`;
-          logoContainer.style.height = `${initialHeight * scale}px`;
-          const containerWidth = previewContainer.clientWidth;
-          const containerHeight = previewContainer.clientHeight;
-          logoContainer.style.left = `${(containerWidth - initialWidth * scale) / 2}px`;
-          logoContainer.style.top = `${(containerHeight - initialHeight * scale) / 2}px`;
-          logoContainer.style.display = 'block';
-        };
       };
       reader.readAsDataURL(file);
     }
 
     // Scale logo with slider
     scaleSlider.addEventListener('input', () => {
-      const scale = parseFloat(scaleSlider.value);
-      logoContainer.style.width = `${initialWidth * scale}px`;
-      logoContainer.style.height = `${initialHeight * scale}px`;
+      logoScale = parseFloat(scaleSlider.value);
+      drawPreview();
     });
 
-    // Drag logo
-    logoContainer.addEventListener('mousedown', (event) => {
-      isDragging = true;
-      startX = event.clientX - logoContainer.offsetLeft;
-      startY = event.clientY - logoContainer.offsetTop;
-    });
-
-    document.addEventListener('mousemove', (event) => {
-      if (isDragging) {
-        let x = event.clientX - startX;
-        let y = event.clientY - startY;
-        const minX = 0;
-        const minY = 0;
-        const maxX = previewContainer.clientWidth - logoContainer.offsetWidth;
-        const maxY = previewContainer.clientHeight - logoContainer.offsetHeight;
-        x = Math.max(minX, Math.min(x, maxX));
-        y = Math.max(minY, Math.min(y, maxY));
-        logoContainer.style.left = `${x}px`;
-        logoContainer.style.top = `${y}px`;
+    // Generate QR code
+    qrText.addEventListener('input', () => {
+      if (qrText.value) {
+        qrCode = qrcode(0, 'M'); // Auto version, medium error correction
+        qrCode.addData(qrText.value);
+        qrCode.make();
+        drawPreview();
+      } else {
+        qrCode = null;
+        drawPreview();
       }
     });
 
-    document.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
+    // Check if a module is part of functional patterns
+    function isFunctionalModule(i, j, n) {
+      // Position patterns (3 orientation corners)
+      if ((i <= 7 && j <= 7) || (i <= 7 && j >= n-8) || (i >= n-8 && j <= 7)) {
+        return true;
+      }
+      // Timing patterns (lines between position patterns)
+      if (i == 6 || j == 6) {
+        return true;
+      }
+      // Alignment pattern in lower-right for version >= 2 (n >= 25)
+      if (n >= 25) {
+        const center = n - 7;
+        if (Math.abs(i - center) <= 2 && Math.abs(j - center) <= 2) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Draw preview
+    function drawPreview() {
+      const canvasSize = previewContainer.clientWidth;
+      qrCanvas.width = canvasSize;
+      qrCanvas.height = canvasSize;
+      ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+      // Draw logo in background
+      if (logoImage.src) {
+        const logoWidth = logoImage.width * logoScale;
+        const logoHeight = logoImage.height * logoScale;
+        const x = (canvasSize - logoWidth) / 2;
+        const y = (canvasSize - logoHeight) / 2;
+        ctx.drawImage(logoImage, x, y, logoWidth, logoHeight);
+      }
+
+      // Draw QR code
+      if (qrCode) {
+        const n = qrCode.getModuleCount();
+        const moduleSize = canvasSize / n;
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            const x = j * moduleSize;
+            const y = i * moduleSize;
+            if (isFunctionalModule(i, j, n)) {
+              // Functional modules: full size
+              if (qrCode.isDark(i, j)) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x, y, moduleSize, moduleSize);
+              } else {
+                ctx.fillStyle = 'white';
+                ctx.fillRect(x, y, moduleSize, moduleSize);
+              }
+            } else {
+              // Data modules
+              if (qrCode.isDark(i, j)) {
+                // Dark data module: 50% size, centered
+                const smallSize = moduleSize * 0.5;
+                const offset = (moduleSize - smallSize) / 2;
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x + offset, y + offset, smallSize, smallSize);
+              } else {
+                // Light data module: full-sized white square
+                ctx.fillStyle = 'white';
+                ctx.fillRect(x, y, moduleSize, moduleSize);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // Download combined image
     downloadBtn.addEventListener('click', () => {
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = qrCanvas.width;
-      tempCanvas.height = qrCanvas.height;
-      const ctx = tempCanvas.getContext('2d');
-      ctx.drawImage(qrCanvas, 0, 0);
-      if (logoImage.src) {
-        const logoX = parseFloat(logoContainer.style.left);
-        const logoY = parseFloat(logoContainer.style.top);
-        const logoWidth = parseFloat(logoContainer.style.width);
-        const logoHeight = parseFloat(logoContainer.style.height);
-        ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
-      }
-      const dataURL = tempCanvas.toDataURL('image/png');
+      const dataURL = qrCanvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = dataURL;
       link.download = 'qr-code.png';
       link.click();
     });
 
-    // Resize preview with UI
-    window.addEventListener('resize', () => {
-      const size = previewContainer.clientWidth;
-      qr.size = size;
-      qrCanvas.width = size;
-      qrCanvas.height = size;
-      qr.value = qrText.value; // Redraw QR code
-    });
+    // Redraw on window resize
+    window.addEventListener('resize', drawPreview);
   </script>
 </body>
 </html>
