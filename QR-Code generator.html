@@ -2,140 +2,129 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive QR Code Generator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        #controls {
-            margin-bottom: 20px;
-            font-family: Arial, sans-serif;
-        }
-        #controls label {
-            margin-right: 15px;
-        }
         #canvas-container {
             position: relative;
-            width: 600px; /* Larger preview window */
-            height: 600px; /* Larger preview window */
+            width: 600px;
+            height: 600px;
             border: 1px solid #ccc;
+            margin: 20px 0;
         }
         #qr-svg {
             width: 100%;
             height: 100%;
         }
-        button {
-            margin: 5px;
-            padding: 8px 15px;
-            cursor: pointer;
-        }
-        #logo-upload {
+        #drop-zone {
+            width: 200px;
+            height: 200px;
             border: 2px dashed #ccc;
-            padding: 30px;
             text-align: center;
-            cursor: pointer;
-            background-color: #f9f9f9;
+            line-height: 200px;
+            margin: 10px 0;
         }
-        #logo-upload.dragover {
-            border-color: #000;
+        #drop-zone.dragover {
             background-color: #e0e0e0;
         }
     </style>
 </head>
 <body>
-    <div id="controls">
-        <label>QR Data: <input type="text" id="qr-data" placeholder="Enter URL or text" style="width: 300px;"></label><br>
-        <div id="logo-upload">Drag and drop logo here (.png, .jpg, .svg) or click to upload</div><br>
-        <label>Logo X: <input type="number" id="logo-x" value="0" step="10"></label>
-        <label>Logo Y: <input type="number" id="logo-y" value="0" step="10"></label>
-        <label>Scale: <input type="number" id="logo-scale" value="1" step="0.1" min="0.1" max="5"></label><br>
-        <button id="generate-btn">Generate QR Code</button>
-        <button id="download-btn">Download SVG</button>
-    </div>
+    <h1>Interactive QR Code Generator</h1>
+    <input type="text" id="qr-data" placeholder="Enter QR Code Data">
     <div id="canvas-container">
         <div id="qr-svg"></div>
     </div>
+    <div id="drop-zone">Drop Logo Here</div>
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
+    <label>Logo X: <input type="number" id="logo-x" value="0"></label>
+    <label>Logo Y: <input type="number" id="logo-y" value="0"></label>
+    <label>Logo Scale: <input type="number" id="logo-scale" value="1" step="0.1"></label>
+    <button id="download-btn">Download SVG</button>
+
     <script>
-        // Element references
         const qrDataInput = document.getElementById('qr-data');
-        const logoUpload = document.getElementById('logo-upload');
+        const qrSvgContainer = document.getElementById('qr-svg');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
         const logoXInput = document.getElementById('logo-x');
         const logoYInput = document.getElementById('logo-y');
         const logoScaleInput = document.getElementById('logo-scale');
-        const generateBtn = document.getElementById('generate-btn');
         const downloadBtn = document.getElementById('download-btn');
-        const qrSvgContainer = document.getElementById('qr-svg');
 
-        // Variables
-        let logoImg = null;
         let qrMatrix = null;
         let N = 0;
-        const moduleSize = 10; // Pixels per module
+        const moduleSize = 10; // Size of each QR module in pixels
+        let logoImg = null;
 
-        // Drag-and-Drop and Click Upload for Logo
-        logoUpload.addEventListener('click', function() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.png,.jpg,.jpeg,.svg';
-            input.onchange = function(e) {
+        // Generate QR code on text input
+        qrDataInput.addEventListener('input', generateQR);
+
+        // Handle file upload via file input
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
                 handleFile(e.target.files[0]);
-            };
-            input.click();
-        });
-
-        logoUpload.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('dragover');
-        });
-
-        logoUpload.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
-        });
-
-        logoUpload.addEventListener('drop', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            const validTypes = ['image/png', 'image/jpeg', 'image/svg+xml'];
-            if (file && validTypes.includes(file.type)) {
-                handleFile(file);
-            } else {
-                alert('Please drop a .png, .jpg, or .svg file.');
             }
+        });
+
+        // Drag-and-drop functionality
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Logo position and scale inputs
+        [logoXInput, logoYInput, logoScaleInput].forEach(input => {
+            input.addEventListener('input', drawSvg);
+        });
+
+        // Download SVG
+        downloadBtn.addEventListener('click', () => {
+            const svgContent = qrSvgContainer.innerHTML;
+            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'qrcode.svg';
+            a.click();
+            URL.revokeObjectURL(url);
         });
 
         function handleFile(file) {
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = (e) => {
                 logoImg = new Image();
-                logoImg.onload = drawSvg;
+                logoImg.onload = () => {
+                    console.log('Logo loaded:', logoImg.width, logoImg.height);
+                    drawSvg();
+                };
+                logoImg.onerror = () => console.error('Error loading logo image');
                 logoImg.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        // Event listeners for controls
-        [logoXInput, logoYInput, logoScaleInput].forEach(input => {
-            input.addEventListener('input', drawSvg);
-        });
-
-        generateBtn.addEventListener('click', generateQR);
-        downloadBtn.addEventListener('click', downloadSvg);
-
-        // Render QR Code as SVG on text input
-        qrDataInput.addEventListener('input', generateQR);
-
-        // Generate QR Code Matrix
         function generateQR() {
             const data = qrDataInput.value.trim();
             if (!data) {
                 qrSvgContainer.innerHTML = '';
+                qrMatrix = null;
                 return;
             }
-            const qr = new QRCode(-1, QRCode.CorrectLevel.H); // Auto version, high error correction
+            const qr = new QRCode(-1, QRCode.CorrectLevel.H);
             qr.addData(data);
             qr.make();
             N = qr.getModuleCount();
@@ -148,20 +137,23 @@
             drawSvg();
         }
 
-        // Draw SVG
         function drawSvg() {
-            if (!qrMatrix) return;
+            if (!qrMatrix) {
+                qrSvgContainer.innerHTML = '';
+                return;
+            }
 
             const logoX = parseFloat(logoXInput.value) || 0;
             const logoY = parseFloat(logoYInput.value) || 0;
             const logoScale = parseFloat(logoScaleInput.value) || 1;
 
-            let svgContent = `<svg width="${moduleSize * N}" height="${moduleSize * N}" xmlns="http://www.w3.org/2000/svg">`;
+            // Use viewBox for scalability and set SVG to fill container
+            let svgContent = `<svg width="100%" height="100%" viewBox="0 0 ${moduleSize * N} ${moduleSize * N}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">`;
 
-            // Draw QR Code
+            // Draw QR code modules
             for (let row = 0; row < N; row++) {
                 for (let col = 0; col < N; col++) {
-                    if (qrMatrix[row][col]) { // Black module
+                    if (qrMatrix[row][col]) {
                         const x = col * moduleSize;
                         const y = row * moduleSize;
                         svgContent += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="black" />`;
@@ -169,8 +161,8 @@
                 }
             }
 
-            // Draw logo if uploaded
-            if (logoImg) {
+            // Draw logo if available
+            if (logoImg && logoImg.complete && logoImg.naturalWidth !== 0) {
                 const w = logoImg.width * logoScale;
                 const h = logoImg.height * logoScale;
                 svgContent += `<image href="${logoImg.src}" x="${logoX}" y="${logoY}" width="${w}" height="${h}" />`;
@@ -178,22 +170,6 @@
 
             svgContent += `</svg>`;
             qrSvgContainer.innerHTML = svgContent;
-        }
-
-        // Download SVG
-        function downloadSvg() {
-            const svgData = qrSvgContainer.innerHTML;
-            if (!svgData) {
-                alert('Please generate a QR code first!');
-                return;
-            }
-            const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'qr-code.svg';
-            a.click();
-            URL.revokeObjectURL(url);
         }
     </script>
 </body>
