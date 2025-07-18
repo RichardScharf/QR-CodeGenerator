@@ -1,6 +1,6 @@
 A simple QR-Code generator WebApp with a Pixelbrush for tweaking (promptgrammed using Grok AI)
 
-### ![Try it here](https://richardscharf.github.io/QR-CodeGenerator/QR-Codegenerator.html)
+### [Try it here](https://richardscharf.github.io/QR-CodeGenerator/QR-Codegenerator.html)
 ### features:
 - Text to QR-Code
 - Pixelbrush for adjusting the opacity, rotation and scale of the generated QR-Code
