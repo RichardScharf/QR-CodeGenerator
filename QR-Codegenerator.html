@@ -458,6 +458,25 @@
         this.elements.qrCanvas.addEventListener('mousedown', (e) => this.startBrushing(e));
         this.elements.qrCanvas.addEventListener('mouseup', () => this.stopBrushing());
 
+        // Touch events for mobile
+        this.elements.qrCanvas.addEventListener('touchstart', (e) => {
+          if (this.state.brushEnabled) {
+            e.preventDefault();
+            this.startBrushing(e.touches[0]);
+          }
+        });
+        this.elements.qrCanvas.addEventListener('touchmove', (e) => {
+          if (this.state.brushEnabled) {
+            e.preventDefault();
+            this.handleMouseMove(e.touches[0]);
+          }
+        });
+        this.elements.qrCanvas.addEventListener('touchend', (e) => {
+          if (this.state.brushEnabled) {
+            this.stopBrushing();
+          }
+        });
+
         // Reset buttons
         this.elements.resetRotationBtn.addEventListener('click', () => this.resetRotation());
         this.elements.resetColorsBtn.addEventListener('click', () => this.resetColors());
