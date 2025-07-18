@@ -7,242 +7,178 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
-      color: #333;
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f0f0f0;
     }
     main {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
       padding: 20px;
-      width: 90%;
-      max-width: 700px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-    #qr-text {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #ccc;
       border-radius: 8px;
-      font-size: 16px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     }
-    #upload-area {
-      border: 2px dashed #aaa;
-      padding: 20px;
+    h1 {
       text-align: center;
-      background: #fafafa;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    #upload-area.dragover {
-      background: #e0e0e0;
+      color: #333;
     }
     #preview-container {
-      position: relative;
       width: 100%;
-      max-width: 300px;
-      height: 300px;
-      border: 1px solid #ddd;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-      align-self: center;
+      max-width: 500px;
+      margin: 20px auto;
+      position: relative;
     }
     #qr-canvas {
       width: 100%;
-      height: 100%;
+      height: auto;
+      border: 1px solid #ddd;
     }
     #brush-silhouette {
       position: absolute;
-      pointer-events: none;
-      border: 1px dashed #666;
+      border: 1px dashed #000;
       border-radius: 50%;
+      pointer-events: none;
       display: none;
     }
-    #controls {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
+    .controls {
+      display: grid;
+      gap: 10px;
+      margin-top: 20px;
     }
-    .section {
-      background: #f9f9f9;
-      padding: 15px;
-      border-radius: 8px;
-      border: 1px solid #eee;
-    }
-    .section-title {
-      font-weight: 600;
-      margin-bottom: 10px;
-      font-size: 16px;
+    label {
+      margin-right: 10px;
       color: #555;
     }
-    .control-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
-    }
-    .control-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .control-group label {
-      font-size: 14px;
-      margin-bottom: 5px;
-      color: #666;
-    }
-    input[type="range"], select, input[type="color"] {
-      width: 100%;
+    input[type="text"], select, button {
       padding: 5px;
-      border-radius: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
     button {
-      padding: 10px 20px;
-      background: #007bff;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
+      background-color: #007BFF;
+      color: white;
       cursor: pointer;
-      font-size: 14px;
-      transition: background 0.2s;
     }
     button:hover {
-      background: #0056b3;
+      background-color: #0056b3;
     }
-    .checkbox-group {
+    #upload-area {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    #upload-area.dragover {
+      background-color: #e0e0e0;
+    }
+    .slider-container {
       display: flex;
-      gap: 10px;
       align-items: center;
-    }
-    .button-group {
-      display: flex;
       gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    .slider-value {
-      font-size: 12px;
-      color: #777;
-      margin-top: 2px;
     }
   </style>
 </head>
 <body>
   <main>
-    <input type="text" id="qr-text" placeholder="Enter text for QR code">
-    <div id="upload-area">
-      <p>Drag or click to upload logo (PNG, JPG, SVG)</p>
-      <input type="file" id="logo-upload" accept="image/*" style="display: none;">
-    </div>
-    <div id="controls">
-      <div class="section">
-        <div class="section-title">QR Code Settings</div>
-        <div class="control-grid">
-          <div class="control-group">
-            <label for="scale-slider">Logo Scale: <span class="slider-value" id="scale-slider-value">1.0</span></label>
-            <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
-          </div>
-          <div class="control-group">
-            <label for="error-correction">Error Correction</label>
-            <select id="error-correction">
-              <option value="L">L (7%)</option>
-              <option value="M" selected>M (15%)</option>
-              <option value="Q">Q (25%)</option>
-              <option value="H">H (30%)</option>
-            </select>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="smooth-corners">
-            <label for="smooth-corners">Smooth Corners</label>
-          </div>
-          <div class="control-group">
-            <label for="roundness">Corner Roundness: <span class="slider-value" id="roundness-value">0.5</span></label>
-            <input type="range" id="roundness" min="0" max="1" step="0.1" value="0.5">
-          </div>
-          <div class="control-group">
-            <label for="black-color-picker">Black Pixel Color</label>
-            <input type="color" id="black-color-picker" value="#000000">
-          </div>
-          <div class="control-group">
-            <label for="white-color-picker">White Pixel Color</label>
-            <input type="color" id="white-color-picker" value="#FFFFFF">
-          </div>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Brush Tool</div>
-        <div class="control-grid">
-          <div class="control-group">
-            <label for="brush-radius">Brush Radius: <span class="slider-value" id="brush-radius-value">3</span></label>
-            <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
-          </div>
-          <div class="control-group">
-            <label for="brush-strength">Strength (Min Size): <span class="slider-value" id="brush-strength-value">0.5</span></label>
-            <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
-          </div>
-          <div class="control-group">
-            <label for="brush-intensity">Intensity/Speed: <span class="slider-value" id="brush-intensity-value">0.05</span></label>
-            <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.05">
-          </div>
-          <div class="control-group">
-            <label for="brush-transparency">Max Transparency: <span class="slider-value" id="brush-transparency-value">0.5</span></label>
-            <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
-          </div>
-          <div class="control-group">
-            <label for="rotation-speed">Rotation Speed: <span class="slider-value" id="rotation-speed-value">0°</span></label>
-            <input type="range" id="rotation-speed" min="-0.5" max="0.5" step="0.05" value="0">
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-scale">
-            <label for="lock-scale">Lock Scale</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-rotation">
-            <label for="lock-rotation">Lock Rotation</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-transparency">
-            <label for="lock-transparency">Lock Transparency</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-scale">
-            <label for="jitter-scale">Jitter Scale</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-rotation">
-            <label for="jitter-rotation">Jitter Rotation</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-color">
-            <label for="jitter-color">Jitter Color</label>
-          </div>
-        </div>
-        <div class="button-group">
-          <button id="brush-toggle">Enable Brush</button>
-          <button id="reset-rotation-btn">Reset Rotation</button>
-          <button id="reset-colors-btn">Reset Colors</button>
-          <button id="reset-scale-btn">Reset Scale</button>
-          <button id="reset-transparency-btn">Reset Transparency</button>
-          <button id="reset-all-btn">Reset All</button>
-          <button id="undo-btn">Undo</button>
-          <button id="redo-btn">Redo</button>
-        </div>
-      </div>
-    </div>
+    <h1>QR Code Generator with Brush Tool</h1>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
       <div id="brush-silhouette"></div>
     </div>
-    <button id="download-btn">Download QR Code (SVG)</button>
+    <div class="controls">
+      <div>
+        <label for="qr-text">QR Text:</label>
+        <input type="text" id="qr-text" value="https://example.com" placeholder="Enter text or URL">
+      </div>
+      <div>
+        <label for="error-correction">Error Correction:</label>
+        <select id="error-correction">
+          <option value="L">Low</option>
+          <option value="M" selected>Medium</option>
+          <option value="Q">Quartile</option>
+          <option value="H">High</option>
+        </select>
+      </div>
+      <div>
+        <label for="logo-upload">Upload Logo:</label>
+        <input type="file" id="logo-upload" accept="image/*" style="display: none;">
+        <div id="upload-area">Click or drag an image here</div>
+      </div>
+      <div class="slider-container">
+        <label for="scale-slider">Logo Scale:</label>
+        <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
+        <span id="scale-slider-value">1</span>
+      </div>
+      <div>
+        <label><input type="checkbox" id="smooth-corners"> Smooth Corners</label>
+      </div>
+      <div class="slider-container">
+        <label for="roundness">Roundness:</label>
+        <input type="range" id="roundness" min="0" max="1" step="0.1" value="0.5">
+        <span id="roundness-value">0.5</span>
+      </div>
+      <div>
+        <label for="black-color-picker">Black Color:</label>
+        <input type="color" id="black-color-picker" value="#000000">
+      </div>
+      <div>
+        <label for="white-color-picker">White Color:</label>
+        <input type="color" id="white-color-picker" value="#FFFFFF">
+      </div>
+      <div>
+        <button id="brush-toggle">Enable Brush</button>
+      </div>
+      <div class="slider-container">
+        <label for="brush-radius">Brush Radius:</label>
+        <input type="range" id="brush-radius" min="1" max="10" value="3">
+        <span id="brush-radius-value">3</span>
+      </div>
+      <div class="slider-container">
+        <label for="brush-strength">Brush Strength:</label>
+        <input type="range" id="brush-strength" min="0" max="1" step="0.1" value="0.5">
+        <span id="brush-strength-value">0.5</span>
+      </div>
+      <div class="slider-container">
+        <label for="brush-intensity">Brush Intensity:</label>
+        <input type="range" id="brush-intensity" min="0" max="1" step="0.1" value="0.5">
+        <span id="brush-intensity-value">0.5</span>
+      </div>
+      <div class="slider-container">
+        <label for="brush-transparency">Brush Transparency:</label>
+        <input type="range" id="brush-transparency" min="0" max="1" step="0.1" value="0.5">
+        <span id="brush-transparency-value">0.5</span>
+      </div>
+      <div class="slider-container">
+        <label for="rotation-speed">Rotation Speed:</label>
+        <input type="range" id="rotation-speed" min="-45" max="45" value="0">
+        <span id="rotation-speed-value">0°</span>
+      </div>
+      <div>
+        <label><input type="checkbox" id="lock-scale"> Lock Scale</label>
+        <label><input type="checkbox" id="lock-rotation"> Lock Rotation</label>
+        <label><input type="checkbox" id="lock-transparency"> Lock Transparency</label>
+      </div>
+      <div>
+        <label><input type="checkbox" id="jitter-scale"> Jitter Scale</label>
+        <label><input type="checkbox" id="jitter-rotation"> Jitter Rotation</label>
+        <label><input type="checkbox" id="jitter-color"> Jitter Color</label>
+      </div>
+      <div>
+        <button id="reset-rotation-btn">Reset Rotation</button>
+        <button id="reset-colors-btn">Reset Colors</button>
+        <button id="reset-scale-btn">Reset Scale</button>
+        <button id="reset-transparency-btn">Reset Transparency</button>
+        <button id="reset-all-btn">Reset All</button>
+      </div>
+      <div>
+        <button id="undo-btn">Undo</button>
+        <button id="redo-btn">Redo</button>
+      </div>
+      <div>
+        <button id="download-btn">Download SVG</button>
+      </div>
+    </div>
   </main>
   <script>
     // --- Utility Functions ---
@@ -382,7 +318,7 @@
           qrCode: null,
           logoBounds: null,
           logoSVGCode: null,
-          brushedModules: new Map(), // Stores scale, transparency, rotation, sShift, lShift
+          brushedModules: new Map(),
           isBrushing: false,
           brushEnabled: false,
           blackColor: '#000000',
@@ -397,7 +333,6 @@
         this.generateQRCode();
       }
 
-      // --- Event Listeners Setup ---
       setupEventListeners() {
         const sliders = [
           { el: this.elements.scaleSlider, display: 'scale-slider-value', format: v => v },
@@ -431,7 +366,7 @@
         this.elements.qrText.addEventListener('input', () => this.generateQRCode());
         this.elements.errorCorrection.addEventListener('change', () => this.generateQRCode());
         this.elements.smoothCorners.addEventListener('change', () => this.drawPreview());
-        this.elements.jitterColor.addEventListener('change', () => this.drawPreview()); // Real-time update
+        this.elements.jitterColor.addEventListener('change', () => this.drawPreview());
 
         this.elements.brushToggle.addEventListener('click', () => this.toggleBrush());
         this.elements.qrCanvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -464,11 +399,8 @@
           const file = e.dataTransfer.files[0];
           if (file && file.type.startsWith('image/')) this.loadLogo(file);
         });
-
-        window.addEventListener('resize', () => this.drawPreview());
       }
 
-      // --- Logo Handling ---
       loadLogo(file) {
         const reader = new FileReader();
         if (file.type === 'image/svg+xml') {
@@ -508,7 +440,6 @@
         };
       }
 
-      // --- QR Code Generation ---
       generateQRCode() {
         if (this.elements.qrText.value) {
           this.state.qrCode = qrcode(0, this.elements.errorCorrection.value);
@@ -523,23 +454,20 @@
         }
       }
 
-      // --- Module Properties ---
       getModuleProperties(i, j) {
         const key = `${i},${j}`;
         return this.state.brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, sShift: 0, lShift: 0 };
       }
 
-      // --- Color Jitter Application ---
       applyColorJitter(baseColor, sShift, lShift) {
         const [r, g, b] = hexToRgb(baseColor);
         const [h, s, l] = rgbToHsl(r, g, b);
-        const newS = Math.max(0, Math.min(1, s + sShift));
-        const newL = Math.max(0, Math.min(1, l + lShift));
+        const newS = Math.min(1, Math.max(0, s + sShift));
+        const newL = Math.min(1, Math.max(0, l + lShift));
         const [newR, newG, newB] = hslToRgb(h, newS, newL);
         return `rgb(${newR},${newG},${newB})`;
       }
 
-      // --- Preview Drawing ---
       drawPreview() {
         const canvasSize = this.elements.previewContainer.clientWidth;
         this.elements.qrCanvas.width = canvasSize;
@@ -572,9 +500,7 @@
             const centerX = x + size / 2;
             const centerY = y + size / 2;
             let baseColor = this.state.qrCode.isDark(i, j) ? this.state.blackColor : this.state.whiteColor;
-            const finalColor = this.state.qrCode.isDark(i, j) && this.elements.jitterColor.checked
-              ? this.applyColorJitter(baseColor, sShift, lShift)
-              : baseColor;
+            const finalColor = this.state.qrCode.isDark(i, j) ? this.applyColorJitter(baseColor, sShift, lShift) : baseColor;
             const gradient = this.elements.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size / 2);
             gradient.addColorStop(0, finalColor);
             gradient.addColorStop(1, `rgba(${hexToRgb(finalColor).join(',')},${1 - transparency})`);
@@ -618,7 +544,6 @@
         this.elements.ctx.fill();
       }
 
-      // --- Brush Controls ---
       toggleBrush() {
         this.state.brushEnabled = !this.state.brushEnabled;
         this.elements.brushToggle.textContent = this.state.brushEnabled ? 'Disable Brush' : 'Enable Brush';
@@ -698,8 +623,7 @@
                   }
                 }
 
-                // Apply S and L jitter only to black pixels when brushing
-                if (this.state.qrCode.isDark(i, j)) {
+                if (this.elements.jitterColor.checked && this.state.qrCode.isDark(i, j)) {
                   current.sShift += (Math.random() - 0.5) * 0.2 * delta;
                   current.lShift += (Math.random() - 0.5) * 0.2 * delta;
                   current.sShift = Math.max(-0.5, Math.min(0.5, current.sShift));
@@ -714,7 +638,6 @@
         this.drawPreview();
       }
 
-      // --- Reset Functions ---
       resetRotation() {
         this.elements.rotationSpeed.value = 0;
         document.getElementById('rotation-speed-value').textContent = '0°';
@@ -755,7 +678,6 @@
         this.drawPreview();
       }
 
-      // --- SVG Download ---
       downloadSVG() {
         const svg = this.generateSVG();
         const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -808,9 +730,7 @@
             const x = j * moduleSize + offset;
             const y = i * moduleSize + offset;
             let baseColor = this.state.qrCode.isDark(i, j) ? this.state.blackColor : this.state.whiteColor;
-            const finalColor = this.state.qrCode.isDark(i, j) && this.elements.jitterColor.checked
-              ? this.applyColorJitter(baseColor, sShift, lShift)
-              : baseColor;
+            const finalColor = this.state.qrCode.isDark(i, j) ? this.applyColorJitter(baseColor, sShift, lShift) : baseColor;
             const gradientId = `${i}_${j}_gradient`;
             svg += `<defs><radialGradient id="${gradientId}" cx="0.5" cy="0.5" r="0.5">
               <stop offset="0%" stop-color="${finalColor}" stop-opacity="1"/>
