@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code Generator</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -84,6 +85,19 @@
     <div id="controls">
       <label for="scale-slider">Logo scale:</label>
       <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
+      <label for="error-correction">Error Correction:</label>
+      <select id="error-correction">
+        <option value="L">L (7%)</option>
+        <option value="M" selected>M (15%)</option>
+        <option value="Q">Q (25%)</option>
+        <option value="H">H (30%)</option>
+      </select>
+      <label for="download-format">Download Format:</label>
+      <select id="download-format">
+        <option value="svg" selected>SVG</option>
+        <option value="pdf">PDF</option>
+        <option value="png">PNG</option>
+      </select>
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
@@ -94,6 +108,8 @@
     const qrText = document.getElementById('qr-text');
     const logoUpload = document.getElementById('logo-upload');
     const scaleSlider = document.getElementById('scale-slider');
+    const errorCorrection = document.getElementById('error-correction');
+    const downloadFormat = document.getElementById('download-format');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
@@ -141,10 +157,11 @@
       drawPreview();
     });
 
-    // Generate QR code
-    qrText.addEventListener('input', () => {
+    // Generate QR code with selected error correction
+    function generateQRCode() {
       if (qrText.value) {
-        qrCode = qrcode(0, 'M'); // Auto version, medium error correction
+        const ecLevel = errorCorrection.value;
+        qrCode = qrcode(0, ecLevel); // Auto version, selected error correction
         qrCode.addData(qrText.value);
         qrCode.make();
         drawPreview();
@@ -152,29 +169,44 @@
         qrCode = null;
         drawPreview();
       }
-    });
+    }
+
+    qrText.addEventListener('input', generateQRCode);
+    errorCorrection.addEventListener('change', generateQRCode);
 
     // Check if a module is part of functional patterns
     function isFunctionalModule(i, j, n) {
-      // Position patterns (3 orientation corners)
       if ((i <= 7 && j <= 7) || (i <= 7 && j >= n - 8) || (i >= n - 8 && j <= 7)) {
-        return true;
+        return true; // Position patterns
       }
-      // Timing patterns (lines between position patterns)
       if (i == 6 || j == 6) {
-        return true;
+        return true; // Timing patterns
       }
-      // Alignment pattern in lower-right for version >= 2 (n >= 25)
       if (n >= 25) {
         const center = n - 7;
         if (Math.abs(i - center) <= 2 && Math.abs(j - center) <= 2) {
-          return true;
+          return true; // Alignment pattern
         }
       }
       return false;
     }
 
-    // Draw preview with feathered data pixels
+    // Check if module overlaps with logo
+    function overlapsLogo(x, y, moduleSize, canvasSize) {
+      if (!logoImage.src) return false;
+      const logoWidth = logoImage.width * logoScale;
+      const logoHeight = logoImage.height * logoScale;
+      const logoX = (canvasSize - logoWidth) / 2;
+      const logoY = (canvasSize - logoHeight) / 2;
+      return (
+        x + moduleSize > logoX &&
+        x < logoX + logoWidth &&
+        y + moduleSize > logoY &&
+        y < logoY + logoHeight
+      );
+    }
+
+    // Draw preview with adjusted feathering
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -194,14 +226,6 @@
       if (qrCode) {
         const n = qrCode.getModuleCount();
         const moduleSize = canvasSize / n;
-        const scaledSize = moduleSize * 0.5;
-        const offset = (moduleSize - scaledSize) / 2;
-
-        // Calculate feather radius based on logo size
-        const logoArea = logoImage.src ? (logoImage.width * logoScale) * (logoImage.height * logoScale) : canvasSize * canvasSize;
-        const canvasArea = canvasSize * canvasSize;
-        const featherFactor = logoArea / canvasArea; // Ratio of logo to canvas area
-        const featherRadius = Math.min(moduleSize * 0.5, moduleSize * featherFactor * 0.75); // Cap at half module size
 
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
@@ -211,39 +235,90 @@
               // Functional modules: full size, no feathering
               ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
               ctx.fillRect(x, y, moduleSize, moduleSize);
-            } else {
-              // Data modules: scaled with feathering
+            } else if (overlapsLogo(x, y, moduleSize, canvasSize)) {
+              // Data modules overlapping logo: scaled with feathering
               const centerX = x + moduleSize / 2;
               const centerY = y + moduleSize / 2;
               const gradient = ctx.createRadialGradient(
-                centerX, centerY, 0, centerX, centerY, featherRadius
+                centerX, centerY, 0, centerX, centerY, moduleSize / 2
               );
               if (qrCode.isDark(i, j)) {
-                gradient.addColorStop(0, 'black');
-                gradient.addColorStop(1, 'transparent');
+                gradient.addColorStop(0, 'rgba(0,0,0,0.5)'); // 50% transparent center
+                gradient.addColorStop(1, 'black');            // Opaque edge
               } else {
-                gradient.addColorStop(0, 'white');
-                gradient.addColorStop(1, 'transparent');
+                gradient.addColorStop(0, 'rgba(255,255,255,0.5)');
+                gradient.addColorStop(1, 'white');
               }
               ctx.fillStyle = gradient;
-              ctx.fillRect(x + offset, y + offset, scaledSize, scaledSize);
+              const scaledSize = moduleSize * 0.5;
+              ctx.fillRect(x + (moduleSize - scaledSize) / 2, y + (moduleSize - scaledSize) / 2, scaledSize, scaledSize);
+            } else {
+              // Data modules not overlapping logo: full size, no feathering
+              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
+              ctx.fillRect(x, y, moduleSize, moduleSize);
             }
           }
         }
       }
     }
 
-    // Download combined image
+    // Download combined image in selected format
     downloadBtn.addEventListener('click', () => {
-      const dataURL = qrCanvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = dataURL;
-      link.download = 'qr-code.png';
-      link.click();
+      const format = downloadFormat.value;
+      if (format === 'png') {
+        const dataURL = qrCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = 'qr-code.png';
+        link.click();
+      } else if (format === 'svg') {
+        const svg = generateSVG();
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'qr-code.svg';
+        link.click();
+        URL.revokeObjectURL(url);
+      } else if (format === 'pdf') {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+        const imgData = qrCanvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 0, 0, 210, 210); // A4 size in mm
+        pdf.save('qr-code.pdf');
+      }
     });
+
+    // Generate SVG string (full modules, no feathering for simplicity)
+    function generateSVG() {
+      const n = qrCode.getModuleCount();
+      const moduleSize = 10; // SVG module size
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${n * moduleSize}" height="${n * moduleSize}" viewBox="0 0 ${n * moduleSize} ${n * moduleSize}">`;
+      if (logoImage.src) {
+        const logoWidth = logoImage.width * logoScale;
+        const logoHeight = logoImage.height * logoScale;
+        const x = (n * moduleSize - logoWidth) / 2;
+        const y = (n * moduleSize - logoHeight) / 2;
+        svg += `<image href="${logoImage.src}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}" />`;
+      }
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          if (qrCode.isDark(i, j)) {
+            const x = j * moduleSize;
+            const y = i * moduleSize;
+            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="black" />`;
+          }
+        }
+      }
+      svg += '</svg>';
+      return svg;
+    }
 
     // Redraw on window resize
     window.addEventListener('resize', drawPreview);
+
+    // Initial draw
+    generateQRCode();
   </script>
 </body>
 </html>
