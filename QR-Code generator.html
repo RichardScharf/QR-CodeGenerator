@@ -13,10 +13,11 @@
     #upload-area.dragover { background-color: #e0e0e0; }
     #preview-container { position: relative; width: 80vw; max-width: 300px; height: 80vw; max-height: 300px; border: 1px solid #000; background-color: #fff; }
     #qr-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    #brush-silhouette { position: absolute; pointer-events: none; border: 1px dashed #000; border-radius: 50%; display: none; }
     #controls { margin: 10px 0; }
     #brush-tool { margin-top: 10px; }
-    #download-btn, #brush-toggle, #undo-btn, #redo-btn, #reset-random-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
-    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover, #reset-random-btn:hover { background-color: #0056b3; }
+    #download-btn, #brush-toggle, #undo-btn, #redo-btn, #reset-rotation-btn, #rotate-left-btn, #rotate-right-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover, #reset-rotation-btn:hover, #rotate-left-btn:hover, #rotate-right-btn:hover { background-color: #0056b3; }
   </style>
 </head>
 <body>
@@ -38,27 +39,30 @@
       </select>
       <label for="smooth-corners">Smooth Corners:</label>
       <input type="checkbox" id="smooth-corners">
+      <label for="transparent-corners">Transparent Corners:</label>
+      <input type="checkbox" id="transparent-corners">
       <div id="brush-tool">
         <label for="brush-radius">Brush Radius:</label>
         <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
         <label for="brush-strength">Strength (Min Size):</label>
         <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
         <label for="brush-intensity">Intensity/Speed:</label>
-        <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.03">
+        <input type="range" id="brush-intensity" min="0.001" max="0.01" step="0.001" value="0.005">
         <label for="brush-transparency">Max Transparency:</label>
         <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
-        <label for="random-rotation">Random Rotation:</label>
-        <input type="checkbox" id="random-rotation">
         <label for="random-scale">Random Scale:</label>
         <input type="checkbox" id="random-scale">
+        <button id="rotate-left-btn">Rotate Left</button>
+        <button id="rotate-right-btn">Rotate Right</button>
+        <button id="reset-rotation-btn">Reset Rotation</button>
         <button id="brush-toggle">Enable Brush</button>
-        <button id="reset-random-btn">Reset Randomization</button>
         <button id="undo-btn" disabled>Undo</button>
         <button id="redo-btn" disabled>Redo</button>
       </div>
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
+      <div id="brush-silhouette"></div>
     </div>
     <button id="download-btn">Download QR Code (SVG)</button>
   </main>
@@ -68,20 +72,23 @@
     const scaleSlider = document.getElementById('scale-slider');
     const errorCorrection = document.getElementById('error-correction');
     const smoothCorners = document.getElementById('smooth-corners');
+    const transparentCorners = document.getElementById('transparent-corners');
     const brushRadius = document.getElementById('brush-radius');
     const brushStrength = document.getElementById('brush-strength');
     const brushIntensity = document.getElementById('brush-intensity');
     const brushTransparency = document.getElementById('brush-transparency');
-    const randomRotation = document.getElementById('random-rotation');
     const randomScale = document.getElementById('random-scale');
+    const rotateLeftBtn = document.getElementById('rotate-left-btn');
+    const rotateRightBtn = document.getElementById('rotate-right-btn');
+    const resetRotationBtn = document.getElementById('reset-rotation-btn');
     const brushToggle = document.getElementById('brush-toggle');
-    const resetRandomBtn = document.getElementById('reset-random-btn');
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
     const qrCanvas = document.getElementById('qr-canvas');
+    const brushSilhouette = document.getElementById('brush-silhouette');
     const ctx = qrCanvas.getContext('2d');
 
     let logoImage = new Image();
@@ -89,11 +96,12 @@
     let qrCode = null;
     let logoBounds = null;
     let logoSVGCode = null;
-    let brushedModules = new Map(); // { scale, transparency, rotation, randomScale }
+    let brushedModules = new Map(); // { scale, transparency, rotation }
     let brushHistory = [];
     let historyIndex = -1;
     let isBrushing = false;
     let brushEnabled = false;
+    let rotationMode = 'none'; // 'left', 'right', or 'none'
 
     // Handle logo upload
     uploadArea.addEventListener('click', () => logoUpload.click());
@@ -157,6 +165,7 @@
     qrText.addEventListener('input', generateQRCode);
     errorCorrection.addEventListener('change', generateQRCode);
     smoothCorners.addEventListener('change', drawPreview);
+    transparentCorners.addEventListener('change', drawPreview);
 
     // Update logo bounds
     function updateLogoBounds() {
@@ -172,10 +181,10 @@
     // Get module properties
     function getModuleProperties(i, j) {
       const moduleKey = `${i},${j}`;
-      return brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, randomScale: 1 };
+      return brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0 };
     }
 
-    // Draw preview with per-pixel transparency, rotation, and scale
+    // Draw preview with silhouette, transparent corners, and inverted transparency gradient
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -192,16 +201,16 @@
 
         // Draw position patterns if smooth corners are enabled
         if (smoothCorners.checked) {
-          drawPositionPatternCanvas(0, 0, moduleSize);
-          drawPositionPatternCanvas(0, n - 7, moduleSize);
-          drawPositionPatternCanvas(n - 7, 0, moduleSize);
+          drawPositionPatternCanvas(0, 0, moduleSize, transparentCorners.checked);
+          drawPositionPatternCanvas(0, n - 7, moduleSize, transparentCorners.checked);
+          drawPositionPatternCanvas(n - 7, 0, moduleSize, transparentCorners.checked);
         }
 
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
             if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-            const { scale, transparency, rotation, randomScale } = getModuleProperties(i, j);
-            const size = moduleSize * scale * randomScale;
+            const { scale, transparency, rotation } = getModuleProperties(i, j);
+            const size = moduleSize * scale;
             const offset = (moduleSize - size) / 2;
             const x = j * moduleSize + offset;
             const y = i * moduleSize + offset;
@@ -209,8 +218,8 @@
             const centerY = y + size / 2;
             const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size / 2);
             const color = qrCode.isDark(i, j) ? '0,0,0' : '255,255,255';
-            gradient.addColorStop(0, `rgba(${color},${transparency})`);
-            gradient.addColorStop(1, `rgba(${color},1)`);
+            gradient.addColorStop(0, `rgba(${color},1)`); // Opaque center
+            gradient.addColorStop(1, `rgba(${color},${1 - transparency})`); // Transparent edges
             ctx.save();
             ctx.translate(centerX, centerY);
             ctx.rotate(rotation * Math.PI / 180);
@@ -223,16 +232,22 @@
       }
     }
 
-    function drawPositionPatternCanvas(row, col, moduleSize) {
+    function drawPositionPatternCanvas(row, col, moduleSize, transparent) {
       const x = col * moduleSize;
       const y = row * moduleSize;
       const radius = moduleSize * 0.75;
       ctx.fillStyle = 'black';
+      if (transparent) {
+        ctx.globalAlpha = 0.5; // Semi-transparent corners
+      }
       drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, radius);
       ctx.fillStyle = 'white';
       drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, radius / 1.25);
       ctx.fillStyle = 'black';
       drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, radius / 2);
+      if (transparent) {
+        ctx.globalAlpha = 1; // Reset transparency
+      }
     }
 
     function drawRoundedRect(ctx, x, y, width, height, radius) {
@@ -259,6 +274,30 @@
       brushEnabled = !brushEnabled;
       brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
       qrCanvas.style.cursor = brushEnabled ? 'crosshair' : 'default';
+      brushSilhouette.style.display = brushEnabled ? 'block' : 'none';
+    });
+
+    // Rotation buttons
+    rotateLeftBtn.addEventListener('click', () => {
+      rotationMode = 'left';
+    });
+
+    rotateRightBtn.addEventListener('click', () => {
+      rotationMode = 'right';
+    });
+
+    // Brush silhouette
+    qrCanvas.addEventListener('mousemove', (event) => {
+      if (brushEnabled) {
+        const rect = qrCanvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const radius = parseInt(brushRadius.value) * (rect.width / qrCode.getModuleCount());
+        brushSilhouette.style.width = `${radius * 2}px`;
+        brushSilhouette.style.height = `${radius * 2}px`;
+        brushSilhouette.style.left = `${x - radius}px`;
+        brushSilhouette.style.top = `${y - radius}px`;
+      }
     });
 
     qrCanvas.addEventListener('mousedown', (event) => {
@@ -303,26 +342,29 @@
             const dist = di * di + dj * dj;
             if (dist <= maxDist) {
               const moduleKey = `${i},${j}`;
-              const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, randomScale: 1 };
+              const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0 };
               const feather = 1 - (dist / maxDist);
               const delta = intensity * feather;
               let newScale = current.scale;
-              if (current.scale > minScale) {
-                newScale = Math.max(minScale, current.scale - delta);
-              } else if (current.scale < minScale) {
-                newScale = Math.min(minScale, current.scale + delta);
+              if (newScale > minScale) {
+                newScale = Math.max(minScale, newScale - delta);
+              } else if (newScale < minScale) {
+                newScale = Math.min(minScale, newScale + delta);
               }
               const transparencyIncrease = delta;
               const newTransparency = Math.min(maxTransparency, current.transparency + transparencyIncrease);
               let newRotation = current.rotation;
-              let newRandomScale = current.randomScale;
-              if (randomRotation.checked) {
-                newRotation += (Math.random() - 0.5) * 10; // Random rotation between -5 and 5 degrees
+              if (rotationMode === 'left') {
+                newRotation -= 5 * feather;
+              } else if (rotationMode === 'right') {
+                newRotation += 5 * feather;
               }
               if (randomScale.checked) {
-                newRandomScale *= (1 + (Math.random() - 0.5) * 0.1); // Random scale factor between 0.95 and 1.05
+                const randomFactor = 1 + (Math.random() - 0.5) * 0.1 * feather;
+                newScale *= randomFactor;
+                newScale = Math.min(1, Math.max(minScale, newScale)); // Cap at min and max
               }
-              brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency, rotation: newRotation, randomScale: newRandomScale });
+              brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency, rotation: newRotation });
             }
           }
         }
@@ -330,11 +372,10 @@
       drawPreview();
     }
 
-    // Reset randomization
-    resetRandomBtn.addEventListener('click', () => {
+    // Reset rotation
+    resetRotationBtn.addEventListener('click', () => {
       for (let [key, value] of brushedModules) {
         value.rotation = 0;
-        value.randomScale = 1;
         brushedModules.set(key, value);
       }
       brushHistory = brushHistory.slice(0, historyIndex + 1);
@@ -368,7 +409,7 @@
       redoBtn.disabled = historyIndex >= brushHistory.length - 1;
     }
 
-    // Download SVG with per-pixel transparency, rotation, and scale
+    // Download SVG with inverted transparency gradient and other effects
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -404,24 +445,25 @@
 
       if (smoothCorners.checked) {
         const radius = moduleSize * 0.75;
-        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius);
-        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, radius);
-        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius);
+        const transparency = transparentCorners.checked ? '0.5' : '1';
+        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius, transparency);
+        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, radius, transparency);
+        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius, transparency);
       }
 
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
           if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-          const { scale, transparency, rotation, randomScale } = getModuleProperties(i, j);
-          const size = moduleSize * scale * randomScale;
+          const { scale, transparency, rotation } = getModuleProperties(i, j);
+          const size = moduleSize * scale;
           const offset = (moduleSize - size) / 2;
           const x = j * moduleSize + offset;
           const y = i * moduleSize + offset;
           const color = qrCode.isDark(i, j) ? 'black' : 'white';
           const gradientId = `${color}Gradient_${i}_${j}`;
           svg += `<defs><radialGradient id="${gradientId}" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stop-color="${color}" stop-opacity="${transparency}"/>
-            <stop offset="100%" stop-color="${color}" stop-opacity="1"/>
+            <stop offset="0%" stop-color="${color}" stop-opacity="1"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="${1 - transparency}"/>
           </radialGradient></defs>`;
           svg += `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#${gradientId})" transform="rotate(${rotation}, ${x + size / 2}, ${y + size / 2})"/>`;
         }
@@ -430,13 +472,13 @@
       return svg;
     }
 
-    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius) {
+    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius, transparency) {
       const x = col * moduleSize;
       const y = row * moduleSize;
       let svg = '';
-      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
-      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${radius / 1.25}" ry="${radius / 1.25}"/>`;
-      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${radius / 2}" ry="${radius / 2}"/>`;
+      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" fill-opacity="${transparency}" rx="${radius}" ry="${radius}"/>`;
+      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" fill-opacity="${transparency}" rx="${radius / 1.25}" ry="${radius / 1.25}"/>`;
+      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" fill-opacity="${transparency}" rx="${radius / 2}" ry="${radius / 2}"/>`;
       return svg;
     }
 
