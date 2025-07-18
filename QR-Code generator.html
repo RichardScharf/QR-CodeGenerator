@@ -223,7 +223,7 @@
           </div>
           <div class="control-group checkbox-group">
             <input type="checkbox" id="jitter-color">
-            <label for="jitter-color">Jitter Color</label>
+            <label for="jitter-color">Jitter Color (Black Pixels)</label>
           </div>
         </div>
         <div class="button-group">
@@ -245,518 +245,578 @@
     <button id="download-btn">Download QR Code (SVG)</button>
   </main>
   <script>
-    const qrText = document.getElementById('qr-text');
-    const logoUpload = document.getElementById('logo-upload');
-    const scaleSlider = document.getElementById('scale-slider');
-    const errorCorrection = document.getElementById('error-correction');
-    const smoothCorners = document.getElementById('smooth-corners');
-    const roundnessSlider = document.getElementById('roundness');
-    const brushRadius = document.getElementById('brush-radius');
-    const brushStrength = document.getElementById('brush-strength');
-    const brushIntensity = document.getElementById('brush-intensity');
-    const brushTransparency = document.getElementById('brush-transparency');
-    const rotationSpeed = document.getElementById('rotation-speed');
-    const lockScale = document.getElementById('lock-scale');
-    const lockRotation = document.getElementById('lock-rotation');
-    const lockTransparency = document.getElementById('lock-transparency');
-    const jitterScale = document.getElementById('jitter-scale');
-    const jitterRotation = document.getElementById('jitter-rotation');
-    const jitterColor = document.getElementById('jitter-color');
-    const blackColorPicker = document.getElementById('black-color-picker');
-    const whiteColorPicker = document.getElementById('white-color-picker');
-    const brushToggle = document.getElementById('brush-toggle');
-    const resetRotationBtn = document.getElementById('reset-rotation-btn');
-    const resetColorsBtn = document.getElementById('reset-colors-btn');
-    const resetScaleBtn = document.getElementById('reset-scale-btn');
-    const resetTransparencyBtn = document.getElementById('reset-transparency-btn');
-    const resetAllBtn = document.getElementById('reset-all-btn');
-    const undoBtn = document.getElementById('undo-btn');
-    const redoBtn = document.getElementById('redo-btn');
-    const previewContainer = document.getElementById('preview-container');
-    const uploadArea = document.getElementById('upload-area');
-    const downloadBtn = document.getElementById('download-btn');
-    const qrCanvas = document.getElementById('qr-canvas');
-    const brushSilhouette = document.getElementById('brush-silhouette');
-    const ctx = qrCanvas.getContext('2d');
+    // QR Code Generator with Strategy Pattern for Color Handling
+    class QRCodeGenerator {
+      constructor() {
+        this.elements = this.initializeElements();
+        this.state = this.initializeState();
+        this.colorStrategy = new DefaultColorStrategy();
+        this.initializeEventListeners();
+        this.generateQRCode();
+      }
 
-    let logoImage = new Image();
-    let logoScale = 1;
-    let qrCode = null;
-    let logoBounds = null;
-    let logoSVGCode = null;
-    let brushedModules = new Map();
-    let history = [];
-    let historyIndex = -1;
-    let isBrushing = false;
-    let brushEnabled = false;
-    let blackColor = '#000000';
-    let whiteColor = '#FFFFFF';
-
-    // Consolidated slider and input event listeners
-    const sliders = [
-      { el: scaleSlider, display: 'scale-slider-value', format: v => v },
-      { el: brushRadius, display: 'brush-radius-value', format: v => v },
-      { el: brushStrength, display: 'brush-strength-value', format: v => v },
-      { el: brushIntensity, display: 'brush-intensity-value', format: v => v },
-      { el: brushTransparency, display: 'brush-transparency-value', format: v => v },
-      { el: rotationSpeed, display: 'rotation-speed-value', format: v => `${v}°` },
-      { el: roundnessSlider, display: 'roundness-value', format: v => v }
-    ];
-    sliders.forEach(slider => {
-      slider.el.addEventListener('input', () => {
-        document.getElementById(slider.display).textContent = slider.format(slider.el.value);
-        if (slider.el === scaleSlider) {
-          logoScale = parseFloat(slider.el.value);
-          updateLogoBounds();
-        }
-        drawPreview();
-      });
-    });
-
-    blackColorPicker.addEventListener('input', () => { blackColor = blackColorPicker.value; drawPreview(); });
-    whiteColorPicker.addEventListener('input', () => { whiteColor = whiteColorPicker.value; drawPreview(); });
-
-    uploadArea.addEventListener('click', () => logoUpload.click());
-    logoUpload.addEventListener('change', (event) => {
-      const file = event.target.files[0];
-      if (file) loadLogo(file);
-    });
-    uploadArea.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      uploadArea.classList.add('dragover');
-    });
-    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-    uploadArea.addEventListener('drop', (event) => {
-      event.preventDefault();
-      uploadArea.classList.remove('dragover');
-      const file = event.dataTransfer.files[0];
-      if (file && file.type.startsWith('image/')) loadLogo(file);
-    });
-
-    function loadLogo(file) {
-      const reader = new FileReader();
-      if (file.type === 'image/svg+xml') {
-        reader.onload = (e) => {
-          let svgContent = e.target.result.replace(/<\?xml[^>]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '');
-          logoSVGCode = svgContent;
-          const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-          logoImage.src = URL.createObjectURL(blob);
-          logoImage.onload = () => { updateLogoBounds(); drawPreview(); };
+      initializeElements() {
+        return {
+          qrText: document.getElementById('qr-text'),
+          logoUpload: document.getElementById('logo-upload'),
+          scaleSlider: document.getElementById('scale-slider'),
+          errorCorrection: document.getElementById('error-correction'),
+          smoothCorners: document.getElementById('smooth-corners'),
+          roundnessSlider: document.getElementById('roundness'),
+          brushRadius: document.getElementById('brush-radius'),
+          brushStrength: document.getElementById('brush-strength'),
+          brushIntensity: document.getElementById('brush-intensity'),
+          brushTransparency: document.getElementById('brush-transparency'),
+          rotationSpeed: document.getElementById('rotation-speed'),
+          lockScale: document.getElementById('lock-scale'),
+          lockRotation: document.getElementById('lock-rotation'),
+          lockTransparency: document.getElementById('lock-transparency'),
+          jitterScale: document.getElementById('jitter-scale'),
+          jitterRotation: document.getElementById('jitter-rotation'),
+          jitterColor: document.getElementById('jitter-color'),
+          blackColorPicker: document.getElementById('black-color-picker'),
+          whiteColorPicker: document.getElementById('white-color-picker'),
+          brushToggle: document.getElementById('brush-toggle'),
+          resetRotationBtn: document.getElementById('reset-rotation-btn'),
+          resetColorsBtn: document.getElementById('reset-colors-btn'),
+          resetScaleBtn: document.getElementById('reset-scale-btn'),
+          resetTransparencyBtn: document.getElementById('reset-transparency-btn'),
+          resetAllBtn: document.getElementById('reset-all-btn'),
+          undoBtn: document.getElementById('undo-btn'),
+          redoBtn: document.getElementById('redo-btn'),
+          previewContainer: document.getElementById('preview-container'),
+          uploadArea: document.getElementById('upload-area'),
+          downloadBtn: document.getElementById('download-btn'),
+          qrCanvas: document.getElementById('qr-canvas'),
+          brushSilhouette: document.getElementById('brush-silhouette'),
+          ctx: document.getElementById('qr-canvas').getContext('2d')
         };
-        reader.readAsText(file);
-      } else {
-        reader.onload = (e) => {
-          logoImage.src = e.target.result;
-          logoImage.onload = () => { updateLogoBounds(); drawPreview(); };
+      }
+
+      initializeState() {
+        return {
+          logoImage: new Image(),
+          logoScale: 1,
+          qrCode: null,
+          logoBounds: null,
+          logoSVGCode: null,
+          brushedModules: new Map(),
+          history: [],
+          historyIndex: -1,
+          isBrushing: false,
+          brushEnabled: false,
+          blackColor: '#000000',
+          whiteColor: '#FFFFFF'
         };
-        reader.readAsDataURL(file);
-      }
-    }
-
-    function updateLogoBounds() {
-      if (!logoImage.src) return;
-      const canvasSize = previewContainer.clientWidth;
-      const logoWidth = logoImage.width * logoScale;
-      const logoHeight = logoImage.height * logoScale;
-      logoBounds = {
-        x: (canvasSize - logoWidth) / 2,
-        y: (canvasSize - logoHeight) / 2,
-        width: logoWidth,
-        height: logoHeight
-      };
-    }
-
-    function generateQRCode() {
-      if (qrText.value) {
-        qrCode = qrcode(0, errorCorrection.value);
-        qrCode.addData(qrText.value);
-        qrCode.make();
-        brushedModules.clear();
-        history = [];
-        historyIndex = -1;
-        drawPreview();
-      } else {
-        qrCode = null;
-        drawPreview();
-      }
-    }
-    qrText.addEventListener('input', generateQRCode);
-    errorCorrection.addEventListener('change', generateQRCode);
-    smoothCorners.addEventListener('change', drawPreview);
-
-    function getModuleProperties(i, j) {
-      const key = `${i},${j}`;
-      return brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
-    }
-
-    function drawPreview() {
-      const canvasSize = previewContainer.clientWidth;
-      qrCanvas.width = canvasSize;
-      qrCanvas.height = canvasSize;
-      ctx.clearRect(0, 0, canvasSize, canvasSize);
-
-      if (logoImage.src) {
-        ctx.drawImage(logoImage, logoBounds.x, logoBounds.y, logoBounds.width, logoBounds.height);
       }
 
-      if (qrCode) {
-        const n = qrCode.getModuleCount();
-        const moduleSize = canvasSize / n;
+      initializeEventListeners() {
+        const sliders = [
+          { el: this.elements.scaleSlider, display: 'scale-slider-value', format: v => v },
+          { el: this.elements.brushRadius, display: 'brush-radius-value', format: v => v },
+          { el: this.elements.brushStrength, display: 'brush-strength-value', format: v => v },
+          { el: this.elements.brushIntensity, display: 'brush-intensity-value', format: v => v },
+          { el: this.elements.brushTransparency, display: 'brush-transparency-value', format: v => v },
+          { el: this.elements.rotationSpeed, display: 'rotation-speed-value', format: v => `${v}°` },
+          { el: this.elements.roundnessSlider, display: 'roundness-value', format: v => v }
+        ];
+        sliders.forEach(slider => {
+          slider.el.addEventListener('input', () => {
+            document.getElementById(slider.display).textContent = slider.format(slider.el.value);
+            if (slider.el === this.elements.scaleSlider) {
+              this.state.logoScale = parseFloat(slider.el.value);
+              this.updateLogoBounds();
+            }
+            this.drawPreview();
+          });
+        });
 
-        if (smoothCorners.checked) {
-          const roundness = parseFloat(roundnessSlider.value);
-          drawPositionPatternCanvas(0, 0, moduleSize, roundness, blackColor, whiteColor);
-          drawPositionPatternCanvas(0, n - 7, moduleSize, roundness, blackColor, whiteColor);
-          drawPositionPatternCanvas(n - 7, 0, moduleSize, roundness, blackColor, whiteColor);
+        this.elements.blackColorPicker.addEventListener('input', () => { this.state.blackColor = this.elements.blackColorPicker.value; this.drawPreview(); });
+        this.elements.whiteColorPicker.addEventListener('input', () => { this.state.whiteColor = this.elements.whiteColorPicker.value; this.drawPreview(); });
+        this.elements.uploadArea.addEventListener('click', () => this.elements.logoUpload.click());
+        this.elements.logoUpload.addEventListener('change', (event) => this.loadLogo(event.target.files[0]));
+        this.elements.uploadArea.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          this.elements.uploadArea.classList.add('dragover');
+        });
+        this.elements.uploadArea.addEventListener('dragleave', () => this.elements.uploadArea.classList.remove('dragover'));
+        this.elements.uploadArea.addEventListener('drop', (event) => {
+          event.preventDefault();
+          this.elements.uploadArea.classList.remove('dragover');
+          const file = event.dataTransfer.files[0];
+          if (file && file.type.startsWith('image/')) this.loadLogo(file);
+        });
+        this.elements.qrText.addEventListener('input', () => this.generateQRCode());
+        this.elements.errorCorrection.addEventListener('change', () => this.generateQRCode());
+        this.elements.smoothCorners.addEventListener('change', () => this.drawPreview());
+        this.elements.brushToggle.addEventListener('click', () => this.toggleBrush());
+        this.elements.qrCanvas.addEventListener('mousemove', (event) => this.handleMouseMove(event));
+        this.elements.qrCanvas.addEventListener('mousedown', (event) => this.startBrushing(event));
+        this.elements.qrCanvas.addEventListener('mouseup', () => this.stopBrushing());
+        this.elements.resetRotationBtn.addEventListener('click', () => this.resetRotation());
+        this.elements.resetColorsBtn.addEventListener('click', () => this.resetColors());
+        this.elements.resetScaleBtn.addEventListener('click', () => this.resetScale());
+        this.elements.resetTransparencyBtn.addEventListener('click', () => this.resetTransparency());
+        this.elements.resetAllBtn.addEventListener('click', () => this.resetAll());
+        this.elements.undoBtn.addEventListener('click', () => this.undo());
+        this.elements.redoBtn.addEventListener('click', () => this.redo());
+        this.elements.downloadBtn.addEventListener('click', () => this.downloadSVG());
+        window.addEventListener('resize', () => this.drawPreview());
+      }
+
+      loadLogo(file) {
+        const reader = new FileReader();
+        if (file.type === 'image/svg+xml') {
+          reader.onload = (e) => {
+            let svgContent = e.target.result.replace(/<\?xml[^>]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '');
+            this.state.logoSVGCode = svgContent;
+            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            this.state.logoImage.src = URL.createObjectURL(blob);
+            this.state.logoImage.onload = () => { this.updateLogoBounds(); this.drawPreview(); };
+          };
+          reader.readAsText(file);
+        } else {
+          reader.onload = (e) => {
+            this.state.logoImage.src = e.target.result;
+            this.state.logoImage.onload = () => { this.updateLogoBounds(); this.drawPreview(); };
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      updateLogoBounds() {
+        if (!this.state.logoImage.src) return;
+        const canvasSize = this.elements.previewContainer.clientWidth;
+        const logoWidth = this.state.logoImage.width * this.state.logoScale;
+        const logoHeight = this.state.logoImage.height * this.state.logoScale;
+        this.state.logoBounds = {
+          x: (canvasSize - logoWidth) / 2,
+          y: (canvasSize - logoHeight) / 2,
+          width: logoWidth,
+          height: logoHeight
+        };
+      }
+
+      generateQRCode() {
+        if (this.elements.qrText.value) {
+          this.state.qrCode = qrcode(0, this.elements.errorCorrection.value);
+          this.state.qrCode.addData(this.elements.qrText.value);
+          this.state.qrCode.make();
+          this.state.brushedModules.clear();
+          this.state.history = [];
+          this.state.historyIndex = -1;
+          this.drawPreview();
+        } else {
+          this.state.qrCode = null;
+          this.drawPreview();
+        }
+      }
+
+      getModuleProperties(i, j) {
+        const key = `${i},${j}`;
+        return this.state.brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, sJitter: 0, lJitter: 0 };
+      }
+
+      drawPreview() {
+        const canvasSize = this.elements.previewContainer.clientWidth;
+        this.elements.qrCanvas.width = canvasSize;
+        this.elements.qrCanvas.height = canvasSize;
+        this.elements.ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+        if (this.state.logoImage.src) {
+          this.elements.ctx.drawImage(this.state.logoImage, this.state.logoBounds.x, this.state.logoBounds.y, this.state.logoBounds.width, this.state.logoBounds.height);
         }
 
-        for (let i = 0; i < n; i++) {
-          for (let j = 0; j < n; j++) {
-            if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-            const { scale, transparency, rotation, colorOffset } = getModuleProperties(i, j);
-            const size = moduleSize * scale;
-            const offset = (moduleSize - size) / 2;
-            const x = j * moduleSize + offset;
-            const y = i * moduleSize + offset;
-            const centerX = x + size / 2;
-            const centerY = y + size / 2;
-            const baseColor = qrCode.isDark(i, j) ? blackColor : whiteColor;
-            const jitteredColor = applyColorJitter(baseColor, colorOffset);
-            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size / 2);
-            gradient.addColorStop(0, jitteredColor);
-            gradient.addColorStop(1, `rgba(${hexToRgb(jitteredColor).join(',')},${1 - transparency})`);
-            ctx.save();
-            ctx.translate(centerX, centerY);
-            ctx.rotate(rotation * Math.PI / 180);
-            ctx.translate(-centerX, -centerY);
-            ctx.fillStyle = gradient;
-            ctx.fillRect(x, y, size, size);
-            ctx.restore();
+        if (this.state.qrCode) {
+          const n = this.state.qrCode.getModuleCount();
+          const moduleSize = canvasSize / n;
+
+          if (this.elements.smoothCorners.checked) {
+            const roundness = parseFloat(this.elements.roundnessSlider.value);
+            this.drawPositionPatternCanvas(0, 0, moduleSize, roundness, this.state.blackColor, this.state.whiteColor);
+            this.drawPositionPatternCanvas(0, n - 7, moduleSize, roundness, this.state.blackColor, this.state.whiteColor);
+            this.drawPositionPatternCanvas(n - 7, 0, moduleSize, roundness, this.state.blackColor, this.state.whiteColor);
           }
-        }
-      }
-    }
 
-    function hexToRgb(hex) {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return [r, g, b];
-    }
-
-    function applyColorJitter(baseColor, offset) {
-      if (!jitterColor.checked || offset === 0) return baseColor;
-      const [r, g, b] = hexToRgb(baseColor);
-      const hsl = rgbToHsl(r, g, b);
-      hsl.l += (Math.random() * 0.2 - 0.1); // ±10% lightness
-      hsl.l = Math.max(0, Math.min(1, hsl.l));
-      const [newR, newG, newB] = hslToRgb(hsl.h, hsl.s, hsl.l);
-      return `rgb(${Math.round(newR)},${Math.round(newG)},${Math.round(newB)})`;
-    }
-
-    function rgbToHsl(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h, s, l = (max + min) / 2;
-      if (max === min) {
-        h = s = 0;
-      } else {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch (max) {
-          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-          case g: h = (b - r) / d + 2; break;
-          case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-      }
-      return { h, s, l };
-    }
-
-    function hslToRgb(h, s, l) {
-      let r, g, b;
-      if (s === 0) {
-        r = g = b = l;
-      } else {
-        const hue2rgb = (p, q, t) => {
-          if (t < 0) t += 1;
-          if (t > 1) t -= 1;
-          if (t < 1 / 6) return p + (q - p) * 6 * t;
-          if (t < 1 / 2) return q;
-          if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-          return p;
-        };
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1 / 3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1 / 3);
-      }
-      return [r * 255, g * 255, b * 255];
-    }
-
-    function drawPositionPatternCanvas(row, col, moduleSize, roundness, blackColor, whiteColor) {
-      const x = col * moduleSize;
-      const y = row * moduleSize;
-      const outerRadius = roundness * (moduleSize * 3.5);
-      const middleRadius = roundness * (moduleSize * 2.5);
-      const innerRadius = roundness * (moduleSize * 1.5);
-      ctx.fillStyle = blackColor;
-      drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, outerRadius);
-      ctx.fillStyle = whiteColor;
-      drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, middleRadius);
-      ctx.fillStyle = blackColor;
-      drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, innerRadius);
-    }
-
-    function drawRoundedRect(ctx, x, y, width, height, radius) {
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.arcTo(x + width, y, x + width, y + radius, radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
-      ctx.lineTo(x + radius, y + height);
-      ctx.arcTo(x, y + height, x, y + height - radius, radius);
-      ctx.lineTo(x, y + radius);
-      ctx.arcTo(x, y, x + radius, y, radius);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    function isPositionPattern(i, j, n) {
-      return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
-    }
-
-    brushToggle.addEventListener('click', () => {
-      brushEnabled = !brushEnabled;
-      brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
-      qrCanvas.style.cursor = brushEnabled ? 'crosshair' : 'default';
-      brushSilhouette.style.display = brushEnabled ? 'block' : 'none';
-    });
-
-    qrCanvas.addEventListener('mousemove', (event) => {
-      if (brushEnabled) {
-        const rect = qrCanvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        const radius = parseInt(brushRadius.value) * (rect.width / (qrCode?.getModuleCount() || 1));
-        brushSilhouette.style.width = `${radius * 2}px`;
-        brushSilhouette.style.height = `${radius * 2}px`;
-        brushSilhouette.style.left = `${x - radius}px`;
-        brushSilhouette.style.top = `${y - radius}px`;
-      }
-      if (isBrushing) applyBrush(event);
-    });
-
-    qrCanvas.addEventListener('mousedown', (event) => {
-      if (!brushEnabled || !qrCode) return;
-      isBrushing = true;
-      applyBrush(event);
-    });
-
-    qrCanvas.addEventListener('mouseup', () => {
-      if (isBrushing) {
-        if (history.length > 10) history.shift();
-        history.push(new Map(brushedModules));
-        historyIndex = history.length - 1;
-        isBrushing = false;
-      }
-    });
-
-    function applyBrush(event) {
-      const rect = qrCanvas.getBoundingClientRect();
-      const x = (event.clientX - rect.left) / rect.width;
-      const y = (event.clientY - rect.top) / rect.height;
-      const n = qrCode.getModuleCount();
-      const radius = parseInt(brushRadius.value);
-      const intensity = parseFloat(brushIntensity.value);
-      const minScale = parseFloat(brushStrength.value);
-      const maxTransparency = parseFloat(brushTransparency.value);
-      const rotationDelta = parseFloat(rotationSpeed.value);
-      const centerI = Math.floor(y * n);
-      const centerJ = Math.floor(x * n);
-      const maxDist = radius * radius;
-
-      for (let di = -radius; di <= radius; di++) {
-        for (let dj = -radius; dj <= radius; dj++) {
-          const i = centerI + di;
-          const j = centerJ + dj;
-          if (i >= 0 && i < n && j >= 0 && j < n) {
-            const dist = di * di + dj * dj;
-            if (dist <= maxDist) {
-              const key = `${i},${j}`;
-              const current = brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
-              const feather = 1 - (dist / maxDist);
-              const delta = intensity * feather;
-
-              if (!lockScale.checked) {
-                const targetScale = minScale;
-                const diff = targetScale - current.scale;
-                current.scale += diff * delta * Math.pow(feather, 2);
-                current.scale = Math.max(0.1, Math.min(1, current.scale));
-                if (jitterScale.checked) {
-                  current.scale *= 1 + (Math.random() - 0.5) * 0.1 * feather;
-                  current.scale = Math.max(0.1, Math.min(1, current.scale));
-                }
-              }
-
-              if (!lockTransparency.checked) {
-                current.transparency = Math.min(maxTransparency, current.transparency + delta);
-              }
-
-              if (!lockRotation.checked && rotationDelta !== 0) {
-                current.rotation += rotationDelta * feather;
-                if (jitterRotation.checked) {
-                  current.rotation += (Math.random() - 0.5) * 10 * feather;
-                }
-              }
-
-              if (jitterColor.checked) {
-                current.colorOffset += (Math.random() - 0.5) * 20 * feather;
-                current.colorOffset = Math.max(-50, Math.min(50, current.colorOffset));
-              }
-
-              brushedModules.set(key, current);
+          this.colorStrategy = this.elements.jitterColor.checked ? new JitterColorStrategy() : new DefaultColorStrategy();
+          for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n; j++) {
+              if (this.elements.smoothCorners.checked && this.isPositionPattern(i, j, n)) continue;
+              const { scale, transparency, rotation, sJitter, lJitter } = this.getModuleProperties(i, j);
+              const size = moduleSize * scale;
+              const offset = (moduleSize - size) / 2;
+              const x = j * moduleSize + offset;
+              const y = i * moduleSize + offset;
+              const centerX = x + size / 2;
+              const centerY = y + size / 2;
+              const baseColor = this.state.qrCode.isDark(i, j) ? this.state.blackColor : this.state.whiteColor;
+              const finalColor = this.colorStrategy.applyColor(baseColor, this.state.qrCode.isDark(i, j), sJitter, lJitter);
+              const gradient = this.elements.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, size / 2);
+              gradient.addColorStop(0, finalColor);
+              gradient.addColorStop(1, `rgba(${this.hexToRgb(finalColor).join(',')},${1 - transparency})`);
+              this.elements.ctx.save();
+              this.elements.ctx.translate(centerX, centerY);
+              this.elements.ctx.rotate(rotation * Math.PI / 180);
+              this.elements.ctx.translate(-centerX, -centerY);
+              this.elements.ctx.fillStyle = gradient;
+              this.elements.ctx.fillRect(x, y, size, size);
+              this.elements.ctx.restore();
             }
           }
         }
       }
-      drawPreview();
-    }
 
-    resetRotationBtn.addEventListener('click', () => {
-      rotationSpeed.value = 0;
-      document.getElementById('rotation-speed-value').textContent = '0°';
-      for (let [key, value] of brushedModules) {
-        value.rotation = 0;
-        brushedModules.set(key, value);
+      hexToRgb(hex) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return [r, g, b];
       }
-      drawPreview();
-    });
 
-    resetColorsBtn.addEventListener('click', () => {
-      for (let [key, value] of brushedModules) {
-        value.colorOffset = 0;
-        brushedModules.set(key, value);
-      }
-      drawPreview();
-    });
-
-    resetScaleBtn.addEventListener('click', () => {
-      for (let [key, value] of brushedModules) {
-        value.scale = 1;
-        brushedModules.set(key, value);
-      }
-      drawPreview();
-    });
-
-    resetTransparencyBtn.addEventListener('click', () => {
-      for (let [key, value] of brushedModules) {
-        value.transparency = 0;
-        brushedModules.set(key, value);
-      }
-      drawPreview();
-    });
-
-    resetAllBtn.addEventListener('click', () => {
-      brushedModules.clear();
-      drawPreview();
-    });
-
-    undoBtn.addEventListener('click', () => {
-      if (historyIndex > 0) {
-        historyIndex--;
-        brushedModules = new Map(history[historyIndex]);
-        drawPreview();
-      }
-    });
-
-    redoBtn.addEventListener('click', () => {
-      if (historyIndex < history.length - 1) {
-        historyIndex++;
-        brushedModules = new Map(history[historyIndex]);
-        drawPreview();
-      }
-    });
-
-    downloadBtn.addEventListener('click', () => {
-      const svg = generateSVG();
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'qr-code.svg';
-      link.click();
-      URL.revokeObjectURL(url);
-    });
-
-    function generateSVG() {
-      if (!qrCode) return '';
-      const n = qrCode.getModuleCount();
-      const moduleSize = 10;
-      const svgSize = n * moduleSize;
-      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`;
-
-      if (logoSVGCode || logoImage.src) {
-        const canvasSize = previewContainer.clientWidth;
-        const svgScaleFactor = svgSize / canvasSize;
-        const logoWidth = logoBounds.width * svgScaleFactor;
-        const logoHeight = logoBounds.height * svgScaleFactor;
-        const x = logoBounds.x * svgScaleFactor;
-        const y = logoBounds.y * svgScaleFactor;
-        if (logoSVGCode) {
-          const scaledLogoSVG = logoSVGCode.replace(/width="[^"]*"/, `width="${logoWidth}"`).replace(/height="[^"]*"/, `height="${logoHeight}"`);
-          svg += `<svg x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}">${scaledLogoSVG}</svg>`;
+      rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) {
+          h = s = 0;
         } else {
-          svg += `<image href="${logoImage.src}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}"/>`;
+          const d = max - min;
+          s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+          switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+          }
+          h /= 6;
         }
+        return [h, s, l];
       }
 
-      if (smoothCorners.checked) {
-        const roundness = parseFloat(roundnessSlider.value);
+      hslToRgb(h, s, l) {
+        let r, g, b;
+        if (s === 0) {
+          r = g = b = l;
+        } else {
+          const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+          };
+          const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+          const p = 2 * l - q;
+          r = hue2rgb(p, q, h + 1 / 3);
+          g = hue2rgb(p, q, h);
+          b = hue2rgb(p, q, h - 1 / 3);
+        }
+        return [r * 255, g * 255, b * 255];
+      }
+
+      drawPositionPatternCanvas(row, col, moduleSize, roundness, blackColor, whiteColor) {
+        const x = col * moduleSize;
+        const y = row * moduleSize;
         const outerRadius = roundness * (moduleSize * 3.5);
         const middleRadius = roundness * (moduleSize * 2.5);
         const innerRadius = roundness * (moduleSize * 1.5);
-        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, outerRadius, middleRadius, innerRadius, blackColor, whiteColor);
-        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, outerRadius, middleRadius, innerRadius, blackColor, whiteColor);
-        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, outerRadius, middleRadius, innerRadius, blackColor, whiteColor);
+        this.elements.ctx.fillStyle = blackColor;
+        this.drawRoundedRect(this.elements.ctx, x, y, 7 * moduleSize, 7 * moduleSize, outerRadius);
+        this.elements.ctx.fillStyle = whiteColor;
+        this.drawRoundedRect(this.elements.ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, middleRadius);
+        this.elements.ctx.fillStyle = blackColor;
+        this.drawRoundedRect(this.elements.ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, innerRadius);
       }
 
-      for (let i = 0; i < n; i++) {
-        for (let j = 0; j < n; j++) {
-          if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
-          const { scale, transparency, rotation, colorOffset } = getModuleProperties(i, j);
-          const size = moduleSize * scale;
-          const offset = (moduleSize - size) / 2;
-          const x = j * moduleSize + offset;
-          const y = i * moduleSize + offset;
-          const baseColor = qrCode.isDark(i, j) ? blackColor : whiteColor;
-          const jitteredColor = applyColorJitter(baseColor, colorOffset);
-          const gradientId = `${i}_${j}_gradient`;
-          svg += `<defs><radialGradient id="${gradientId}" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stop-color="${jitteredColor}" stop-opacity="1"/>
-            <stop offset="100%" stop-color="${jitteredColor}" stop-opacity="${1 - transparency}"/>
-          </radialGradient></defs>`;
-          svg += `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#${gradientId})" transform="rotate(${rotation}, ${x + size / 2}, ${y + size / 2})"/>`;
+      drawRoundedRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.arcTo(x + width, y, x + width, y + radius, radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+        ctx.lineTo(x + radius, y + height);
+        ctx.arcTo(x, y + height, x, y + height - radius, radius);
+        ctx.lineTo(x, y + radius);
+        ctx.arcTo(x, y, x + radius, y, radius);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      isPositionPattern(i, j, n) {
+        return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
+      }
+
+      toggleBrush() {
+        this.state.brushEnabled = !this.state.brushEnabled;
+        this.elements.brushToggle.textContent = this.state.brushEnabled ? 'Disable Brush' : 'Enable Brush';
+        this.elements.qrCanvas.style.cursor = this.state.brushEnabled ? 'crosshair' : 'default';
+        this.elements.brushSilhouette.style.display = this.state.brushEnabled ? 'block' : 'none';
+      }
+
+      handleMouseMove(event) {
+        if (this.state.brushEnabled) {
+          const rect = this.elements.qrCanvas.getBoundingClientRect();
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+          const radius = parseInt(this.elements.brushRadius.value) * (rect.width / (this.state.qrCode?.getModuleCount() || 1));
+          this.elements.brushSilhouette.style.width = `${radius * 2}px`;
+          this.elements.brushSilhouette.style.height = `${radius * 2}px`;
+          this.elements.brushSilhouette.style.left = `${x - radius}px`;
+          this.elements.brushSilhouette.style.top = `${y - radius}px`;
+        }
+        if (this.state.isBrushing) this.applyBrush(event);
+      }
+
+      startBrushing(event) {
+        if (!this.state.brushEnabled || !this.state.qrCode) return;
+        this.state.isBrushing = true;
+        this.applyBrush(event);
+      }
+
+      stopBrushing() {
+        if (this.state.isBrushing) {
+          if (this.state.history.length > 10) this.state.history.shift();
+          this.state.history.push(new Map(this.state.brushedModules));
+          this.state.historyIndex = this.state.history.length - 1;
+          this.state.isBrushing = false;
         }
       }
-      svg += '</svg>';
-      return svg;
+
+      applyBrush(event) {
+        const rect = this.elements.qrCanvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        const n = this.state.qrCode.getModuleCount();
+        const radius = parseInt(this.elements.brushRadius.value);
+        const intensity = parseFloat(this.elements.brushIntensity.value);
+        const minScale = parseFloat(this.elements.brushStrength.value);
+        const maxTransparency = parseFloat(this.elements.brushTransparency.value);
+        const rotationDelta = parseFloat(this.elements.rotationSpeed.value);
+        const centerI = Math.floor(y * n);
+        const centerJ = Math.floor(x * n);
+        const maxDist = radius * radius;
+
+        for (let di = -radius; di <= radius; di++) {
+          for (let dj = -radius; dj <= radius; dj++) {
+            const i = centerI + di;
+            const j = centerJ + dj;
+            if (i >= 0 && i < n && j >= 0 && j < n) {
+              const dist = di * di + dj * dj;
+              if (dist <= maxDist) {
+                const key = `${i},${j}`;
+                const current = this.state.brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, sJitter: 0, lJitter: 0 };
+                const feather = 1 - (dist / maxDist);
+                const delta = intensity * feather;
+
+                if (!this.elements.lockScale.checked) {
+                  const targetScale = minScale;
+                  const diff = targetScale - current.scale;
+                  current.scale += diff * delta * Math.pow(feather, 2);
+                  current.scale = Math.max(0.1, Math.min(1, current.scale));
+                  if (this.elements.jitterScale.checked) {
+                    current.scale *= 1 + (Math.random() - 0.5) * 0.1 * feather;
+                    current.scale = Math.max(0.1, Math.min(1, current.scale));
+                  }
+                }
+
+                if (!this.elements.lockTransparency.checked) {
+                  current.transparency = Math.min(maxTransparency, current.transparency + delta);
+                }
+
+                if (!this.elements.lockRotation.checked && rotationDelta !== 0) {
+                  current.rotation += rotationDelta * feather;
+                  if (this.elements.jitterRotation.checked) {
+                    current.rotation += (Math.random() - 0.5) * 10 * feather;
+                  }
+                }
+
+                if (this.elements.jitterColor.checked && this.state.qrCode.isDark(i, j)) {
+                  current.sJitter += delta * feather;
+                  current.lJitter += delta * feather;
+                  current.sJitter = Math.max(-0.5, Math.min(0.5, current.sJitter));
+                  current.lJitter = Math.max(-0.5, Math.min(0.5, current.lJitter));
+                }
+
+                this.state.brushedModules.set(key, current);
+              }
+            }
+          }
+        }
+        this.drawPreview();
+      }
+
+      resetRotation() {
+        this.elements.rotationSpeed.value = 0;
+        document.getElementById('rotation-speed-value').textContent = '0°';
+        for (let [key, value] of this.state.brushedModules) {
+          value.rotation = 0;
+          this.state.brushedModules.set(key, value);
+        }
+        this.drawPreview();
+      }
+
+      resetColors() {
+        for (let [key, value] of this.state.brushedModules) {
+          value.sJitter = 0;
+          value.lJitter = 0;
+          this.state.brushedModules.set(key, value);
+        }
+        this.drawPreview();
+      }
+
+      resetScale() {
+        for (let [key, value] of this.state.brushedModules) {
+          value.scale = 1;
+          this.state.brushedModules.set(key, value);
+        }
+        this.drawPreview();
+      }
+
+      resetTransparency() {
+        for (let [key, value] of this.state.brushedModules) {
+          value.transparency = 0;
+          this.state.brushedModules.set(key, value);
+        }
+        this.drawPreview();
+      }
+
+      resetAll() {
+        this.state.brushedModules.clear();
+        this.drawPreview();
+      }
+
+      undo() {
+        if (this.state.historyIndex > 0) {
+          this.state.historyIndex--;
+          this.state.brushedModules = new Map(this.state.history[this.state.historyIndex]);
+          this.drawPreview();
+        }
+      }
+
+      redo() {
+        if (this.state.historyIndex < this.state.history.length - 1) {
+          this.state.historyIndex++;
+          this.state.brushedModules = new Map(this.state.history[this.state.historyIndex]);
+          this.drawPreview();
+        }
+      }
+
+      downloadSVG() {
+        const svg = this.generateSVG();
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'qr-code.svg';
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      generateSVG() {
+        if (!this.state.qrCode) return '';
+        const n = this.state.qrCode.getModuleCount();
+        const moduleSize = 10;
+        const svgSize = n * moduleSize;
+        let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`;
+
+        if (this.state.logoSVGCode || this.state.logoImage.src) {
+          const canvasSize = this.elements.previewContainer.clientWidth;
+          const svgScaleFactor = svgSize / canvasSize;
+          const logoWidth = this.state.logoBounds.width * svgScaleFactor;
+          const logoHeight = this.state.logoBounds.height * svgScaleFactor;
+          const x = this.state.logoBounds.x * svgScaleFactor;
+          const y = this.state.logoBounds.y * svgScaleFactor;
+          if (this.state.logoSVGCode) {
+            const scaledLogoSVG = this.state.logoSVGCode.replace(/width="[^"]*"/, `width="${logoWidth}"`).replace(/height="[^"]*"/, `height="${logoHeight}"`);
+            svg += `<svg x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}">${scaledLogoSVG}</svg>`;
+          } else {
+            svg += `<image href="${this.state.logoImage.src}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}"/>`;
+          }
+        }
+
+        if (this.elements.smoothCorners.checked) {
+          const roundness = parseFloat(this.elements.roundnessSlider.value);
+          const outerRadius = roundness * (moduleSize * 3.5);
+          const middleRadius = roundness * (moduleSize * 2.5);
+          const innerRadius = roundness * (moduleSize * 1.5);
+          svg += this.drawSVGRoundedPositionPattern(0, 0, moduleSize, outerRadius, middleRadius, innerRadius, this.state.blackColor, this.state.whiteColor);
+          svg += this.drawSVGRoundedPositionPattern(0, n - 7, moduleSize, outerRadius, middleRadius, innerRadius, this.state.blackColor, this.state.whiteColor);
+          svg += this.drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, outerRadius, middleRadius, innerRadius, this.state.blackColor, this.state.whiteColor);
+        }
+
+        this.colorStrategy = this.elements.jitterColor.checked ? new JitterColorStrategy() : new DefaultColorStrategy();
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            if (this.elements.smoothCorners.checked && this.isPositionPattern(i, j, n)) continue;
+            const { scale, transparency, rotation, sJitter, lJitter } = this.getModuleProperties(i, j);
+            const size = moduleSize * scale;
+            const offset = (moduleSize - size) / 2;
+            const x = j * moduleSize + offset;
+            const y = i * moduleSize + offset;
+            const baseColor = this.state.qrCode.isDark(i, j) ? this.state.blackColor : this.state.whiteColor;
+            const finalColor = this.colorStrategy.applyColor(baseColor, this.state.qrCode.isDark(i, j), sJitter, lJitter);
+            const gradientId = `${i}_${j}_gradient`;
+            svg += `<defs><radialGradient id="${gradientId}" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0%" stop-color="${finalColor}" stop-opacity="1"/>
+              <stop offset="100%" stop-color="${finalColor}" stop-opacity="${1 - transparency}"/>
+            </radialGradient></defs>`;
+            svg += `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="url(#${gradientId})" transform="rotate(${rotation}, ${x + size / 2}, ${y + size / 2})"/>`;
+          }
+        }
+        svg += '</svg>';
+        return svg;
+      }
+
+      drawSVGRoundedPositionPattern(row, col, moduleSize, outerRadius, middleRadius, innerRadius, blackColor, whiteColor) {
+        const x = col * moduleSize;
+        const y = row * moduleSize;
+        return `
+          <rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="${blackColor}" rx="${outerRadius}"/>
+          <rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="${whiteColor}" rx="${middleRadius}"/>
+          <rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="${blackColor}" rx="${innerRadius}"/>
+        `;
+      }
     }
 
-    function drawSVGRoundedPositionPattern(row, col, moduleSize, outerRadius, middleRadius, innerRadius, blackColor, whiteColor) {
-      const x = col * moduleSize;
-      const y = row * moduleSize;
-      return `
-        <rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="${blackColor}" rx="${outerRadius}"/>
-        <rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="${whiteColor}" rx="${middleRadius}"/>
-        <rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="${blackColor}" rx="${innerRadius}"/>
-      `;
+    // Color Strategy Interface
+    class ColorStrategy {
+      applyColor(baseColor, isDark, sJitter, lJitter) {
+        throw new Error('Method must be implemented');
+      }
     }
 
-    window.addEventListener('resize', drawPreview);
-    generateQRCode();
+    // Default Color Strategy
+    class DefaultColorStrategy extends ColorStrategy {
+      constructor() {
+        super();
+        this.qrGenerator = new QRCodeGenerator();
+      }
+
+      applyColor(baseColor, isDark, sJitter, lJitter) {
+        return baseColor;
+      }
+    }
+
+    // Jitter Color Strategy for Black Pixels (S and L only)
+    class JitterColorStrategy extends ColorStrategy {
+      constructor() {
+        super();
+        this.qrGenerator = new QRCodeGenerator();
+      }
+
+      applyColor(baseColor, isDark, sJitter, lJitter) {
+        if (!isDark) return baseColor;
+        const [h, s, l] = this.qrGenerator.rgbToHsl(...this.qrGenerator.hexToRgb(baseColor));
+        const newS = Math.max(0, Math.min(1, s + sJitter));
+        const newL = Math.max(0, Math.min(1, l + lJitter));
+        const [r, g, b] = this.qrGenerator.hslToRgb(h, newS, newL);
+        return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+      }
+    }
+
+    // Initialize the QR Code Generator
+    new QRCodeGenerator();
   </script>
 </body>
 </html>
