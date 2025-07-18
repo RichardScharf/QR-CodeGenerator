@@ -3,100 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enhanced QR Code Generator</title>
+  <title>QR Code Generator</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Segoe UI', Arial, sans-serif;
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background-color: #f0f0f0;
+      background: linear-gradient(135deg, #f0f4f8, #d9e2ec);
+      color: #333;
     }
     main {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      width: 90%;
+      max-width: 700px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      padding: 20px;
-      width: 100%;
-      max-width: 600px;
+      gap: 20px;
     }
     #qr-text {
       width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
+      padding: 12px;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 8px;
+      font-size: 16px;
     }
     #upload-area {
-      border: 2px dashed #ccc;
+      border: 2px dashed #aaa;
       padding: 20px;
-      margin: 10px 0;
-      cursor: pointer;
-      background-color: #fff;
       text-align: center;
-      width: 100%;
+      background: #fafafa;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
     }
     #upload-area.dragover {
-      background-color: #e0e0e0;
+      background: #e0e0e0;
     }
     #preview-container {
       position: relative;
       width: 100%;
       max-width: 300px;
       height: 300px;
-      border: 1px solid #000;
-      background-color: #fff;
-      margin: 10px 0;
+      border: 1px solid #ddd;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      align-self: center;
     }
     #qr-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
       width: 100%;
       height: 100%;
     }
     #brush-silhouette {
       position: absolute;
       pointer-events: none;
-      border: 1px dashed #000;
+      border: 1px dashed #666;
       border-radius: 50%;
       display: none;
     }
-    #controls, #brush-tool {
+    #controls {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .section {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+    .section-title {
+      font-weight: 600;
+      margin-bottom: 10px;
+      font-size: 16px;
+      color: #555;
+    }
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
-      justify-content: center;
     }
     .control-group {
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin: 5px;
     }
-    #lock-options, #jitter-options, #reset-options {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
+    .control-group label {
+      font-size: 14px;
+      margin-bottom: 5px;
+      color: #666;
     }
-    #lock-options div, #jitter-options div {
-      display: flex;
-      gap: 10px;
+    input[type="range"], select {
+      width: 100%;
+      padding: 5px;
+      border-radius: 5px;
     }
     button {
       padding: 10px 20px;
-      background-color: #007bff;
+      background: #007bff;
       color: #fff;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
     }
     button:hover {
-      background-color: #0056b3;
+      background: #0056b3;
+    }
+    .checkbox-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .button-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
   </style>
 </head>
@@ -104,71 +135,86 @@
   <main>
     <input type="text" id="qr-text" placeholder="Enter text for QR code">
     <div id="upload-area">
-      <p>Drag and drop or click to upload logo (PNG, JPG, SVG)</p>
+      <p>Drag or click to upload logo (PNG, JPG, SVG)</p>
       <input type="file" id="logo-upload" accept="image/*" style="display: none;">
     </div>
     <div id="controls">
-      <div class="control-group">
-        <label for="scale-slider">Logo Scale:</label>
-        <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
-      </div>
-      <div class="control-group">
-        <label for="error-correction">Error Correction:</label>
-        <select id="error-correction">
-          <option value="L">L (7%)</option>
-          <option value="M" selected>M (15%)</option>
-          <option value="Q">Q (25%)</option>
-          <option value="H">H (30%)</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label for="smooth-corners">Smooth Corners:</label>
-        <input type="checkbox" id="smooth-corners">
-      </div>
-      <div class="control-group">
-        <label for="transparent-corners">Transparent Corners:</label>
-        <input type="checkbox" id="transparent-corners">
-      </div>
-      <div id="brush-tool">
-        <div class="control-group">
-          <label for="brush-radius">Brush Radius:</label>
-          <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
-        </div>
-        <div class="control-group">
-          <label for="brush-strength">Strength (Min Size):</label>
-          <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
-        </div>
-        <div class="control-group">
-          <label for="brush-intensity">Intensity/Speed:</label>
-          <input type="range" id="brush-intensity" min="0.001" max="0.01" step="0.001" value="0.005">
-        </div>
-        <div class="control-group">
-          <label for="brush-transparency">Max Transparency:</label>
-          <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
-        </div>
-        <div class="control-group">
-          <label for="rotation-speed">Rotation Speed (-10 to 10 degrees):</label>
-          <input type="range" id="rotation-speed" min="-10" max="10" step="0.5" value="0">
-        </div>
-        <div id="lock-options" class="control-group">
-          <label>Lock Options:</label>
-          <div>
-            <input type="checkbox" id="lock-scale"> <label for="lock-scale">Scale</label>
-            <input type="checkbox" id="lock-rotation"> <label for="lock-rotation">Rotation</label>
-            <input type="checkbox" id="lock-transparency"> <label for="lock-transparency">Transparency</label>
+      <div class="section">
+        <div class="section-title">QR Code Settings</div>
+        <div class="control-grid">
+          <div class="control-group">
+            <label for="scale-slider">Logo Scale</label>
+            <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
+          </div>
+          <div class="control-group">
+            <label for="error-correction">Error Correction</label>
+            <select id="error-correction">
+              <option value="L">L (7%)</option>
+              <option value="M" selected>M (15%)</option>
+              <option value="Q">Q (25%)</option>
+              <option value="H">H (30%)</option>
+            </select>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="smooth-corners">
+            <label for="smooth-corners">Smooth Corners</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="transparent-corners">
+            <label for="transparent-corners">Transparent Corners</label>
           </div>
         </div>
-        <div id="jitter-options" class="control-group">
-          <label>Jitter Options:</label>
-          <div>
-            <input type="checkbox" id="jitter-scale"> <label for="jitter-scale">Scale</label>
-            <input type="checkbox" id="jitter-rotation"> <label for="jitter-rotation">Rotation</label>
-            <input type="checkbox" id="jitter-color"> <label for="jitter-color">Color</label>
+      </div>
+      <div class="section">
+        <div class="section-title">Brush Tool</div>
+        <div class="control-grid">
+          <div class="control-group">
+            <label for="brush-radius">Brush Radius</label>
+            <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
+          </div>
+          <div class="control-group">
+            <label for="brush-strength">Strength (Min Size)</label>
+            <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
+          </div>
+          <div class="control-group">
+            <label for="brush-intensity">Intensity/Speed</label>
+            <input type="range" id="brush-intensity" min="0.001" max="0.01" step="0.001" value="0.005">
+          </div>
+          <div class="control-group">
+            <label for="brush-transparency">Max Transparency</label>
+            <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
+          </div>
+          <div class="control-group">
+            <label for="rotation-speed">Rotation Speed</label>
+            <input type="range" id="rotation-speed" min="-2" max="2" step="0.1" value="0">
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="lock-scale">
+            <label for="lock-scale">Lock Scale</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="lock-rotation">
+            <label for="lock-rotation">Lock Rotation</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="lock-transparency">
+            <label for="lock-transparency">Lock Transparency</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="jitter-scale">
+            <label for="jitter-scale">Jitter Scale</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="jitter-rotation">
+            <label for="jitter-rotation">Jitter Rotation</label>
+          </div>
+          <div class="control-group checkbox-group">
+            <input type="checkbox" id="jitter-color">
+            <label for="jitter-color">Jitter Color</label>
           </div>
         </div>
-        <button id="brush-toggle">Enable Brush</button>
-        <div id="reset-options" class="control-group">
-          <label>Reset Options:</label>
+        <div class="button-group">
+          <button id="brush-toggle">Enable Brush</button>
           <button id="reset-colors-btn">Reset Colors</button>
           <button id="reset-scale-btn">Reset Scale</button>
           <button id="reset-transparency-btn">Reset Transparency</button>
@@ -217,11 +263,10 @@
     let qrCode = null;
     let logoBounds = null;
     let logoSVGCode = null;
-    let brushedModules = new Map(); // { scale, transparency, rotation, colorOffset }
+    let brushedModules = new Map();
     let brushEnabled = false;
     let isBrushing = false;
 
-    // Handle logo upload
     uploadArea.addEventListener('click', () => logoUpload.click());
     logoUpload.addEventListener('change', (event) => {
       const file = event.target.files[0];
@@ -280,7 +325,6 @@
       };
     }
 
-    // Generate QR code
     function generateQRCode() {
       if (qrText.value) {
         qrCode = qrcode(0, errorCorrection.value);
@@ -298,13 +342,11 @@
     smoothCorners.addEventListener('change', drawPreview);
     transparentCorners.addEventListener('change', drawPreview);
 
-    // Get module properties
     function getModuleProperties(i, j) {
       const key = `${i},${j}`;
       return brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
     }
 
-    // Draw preview
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -381,7 +423,6 @@
       return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
     }
 
-    // Brush tool
     brushToggle.addEventListener('click', () => {
       brushEnabled = !brushEnabled;
       brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
@@ -445,7 +486,8 @@
 
               if (!lockScale.checked) {
                 const targetScale = minScale;
-                current.scale += delta * (targetScale - current.scale);
+                const diff = targetScale - current.scale;
+                current.scale += diff * delta * Math.pow(feather, 2); // Quadratic scaling
                 current.scale = Math.max(0.1, Math.min(1, current.scale));
                 if (jitterScale.checked) {
                   current.scale *= 1 + (Math.random() - 0.5) * 0.1 * feather;
@@ -477,7 +519,6 @@
       drawPreview();
     }
 
-    // Reset buttons
     resetColorsBtn.addEventListener('click', () => {
       for (let [key, value] of brushedModules) {
         value.colorOffset = 0;
@@ -507,7 +548,6 @@
       drawPreview();
     });
 
-    // Download SVG
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
