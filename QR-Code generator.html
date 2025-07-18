@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Code Generator</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -80,7 +79,7 @@
     <input type="text" id="qr-text" placeholder="Enter text for QR code">
     <div id="upload-area">
       <p>Drag and drop or click to upload logo (PNG, JPG, SVG)</p>
-      <input type="file" id="logo-upload" accept="image/*">
+      <input type="file" id="logo-upload" accept="image/*" style="display: none;">
     </div>
     <div id="controls">
       <label for="scale-slider">Logo scale:</label>
@@ -92,26 +91,19 @@
         <option value="Q">Q (25%)</option>
         <option value="H">H (30%)</option>
       </select>
-      <label for="download-format">Download Format:</label>
-      <select id="download-format">
-        <option value="svg" selected>SVG</option>
-        <option value="png">PNG</option>
-        <option value="pdf">PDF</option>
-      </select>
       <label for="rounded-corners">Rounded Corners:</label>
       <input type="checkbox" id="rounded-corners">
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
     </div>
-    <button id="download-btn">Download QR Code</button>
+    <button id="download-btn">Download QR Code (SVG)</button>
   </main>
   <script>
     const qrText = document.getElementById('qr-text');
     const logoUpload = document.getElementById('logo-upload');
     const scaleSlider = document.getElementById('scale-slider');
     const errorCorrection = document.getElementById('error-correction');
-    const downloadFormat = document.getElementById('download-format');
     const roundedCorners = document.getElementById('rounded-corners');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
@@ -123,10 +115,9 @@
     let logoScale = 1;
     let qrCode = null;
     let logoBounds = null;
-    let blackGradientCache = null;
-    let whiteGradientCache = null;
 
     // Handle logo upload
+    uploadArea.addEventListener('click', () => logoUpload.click());
     logoUpload.addEventListener('change', (event) => {
       const file = event.target.files[0];
       if (file) loadLogo(file);
@@ -167,7 +158,7 @@
       drawPreview();
     });
 
-    // Generate QR code with selected error correction
+    // Generate QR code
     function generateQRCode() {
       if (qrText.value) {
         const ecLevel = errorCorrection.value;
@@ -185,7 +176,7 @@
     errorCorrection.addEventListener('change', generateQRCode);
     roundedCorners.addEventListener('change', drawPreview);
 
-    // Update logo bounds for overlap checks
+    // Update logo bounds
     function updateLogoBounds() {
       if (!logoImage.src) return;
       const canvasSize = previewContainer.clientWidth;
@@ -196,7 +187,7 @@
       logoBounds = { x, y, width: logoWidth, height: logoHeight };
     }
 
-    // Check if module overlaps with logo
+    // Check if module overlaps logo
     function overlapsLogo(x, y, moduleSize) {
       if (!logoBounds) return false;
       return (
@@ -207,20 +198,18 @@
       );
     }
 
-    // Draw preview with optimized feathering
+    // Draw preview
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
       qrCanvas.height = canvasSize;
       ctx.clearRect(0, 0, canvasSize, canvasSize);
 
-      // Draw logo in background
+      // Draw logo
       if (logoImage.src) {
         const x = logoBounds.x;
         const y = logoBounds.y;
-        const logoWidth = logoBounds.width;
-        const logoHeight = logoBounds.height;
-        ctx.drawImage(logoImage, x, y, logoWidth, logoHeight);
+        ctx.drawImage(logoImage, x, y, logoBounds.width, logoBounds.height);
       }
 
       // Draw QR code
@@ -230,40 +219,37 @@
         const scaledSize = moduleSize * 0.5;
         const offset = (moduleSize - scaledSize) / 2;
 
-        // Cache gradients for performance
-        if (!blackGradientCache || !whiteGradientCache) {
-          blackGradientCache = ctx.createRadialGradient(0, 0, 0, 0, 0, moduleSize / 2);
-          blackGradientCache.addColorStop(0, 'rgba(0,0,0,0.5)');
-          blackGradientCache.addColorStop(1, 'black');
-          whiteGradientCache = ctx.createRadialGradient(0, 0, 0, 0, 0, moduleSize / 2);
-          whiteGradientCache.addColorStop(0, 'rgba(255,255,255,0.5)');
-          whiteGradientCache.addColorStop(1, 'white');
+        // Draw fused position patterns with rounded corners
+        if (roundedCorners.checked) {
+          const cornerRadius = moduleSize * 2;
+          drawPositionPattern(0, 0, moduleSize, cornerRadius);
+          drawPositionPattern(n - 7, 0, moduleSize, cornerRadius);
+          drawPositionPattern(0, n - 7, moduleSize, cornerRadius);
         }
 
+        // Draw individual modules
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
+            if (isPositionPattern(i, j, n) && roundedCorners.checked) continue;
             const x = j * moduleSize;
             const y = i * moduleSize;
             if (isFunctionalModule(i, j, n)) {
-              // Functional modules: full size, no feathering
               ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
-              if (roundedCorners.checked && isPositionPattern(i, j, n)) {
-                drawRoundedRect(ctx, x, y, moduleSize, moduleSize, moduleSize * 0.2);
-              } else {
-                ctx.fillRect(x, y, moduleSize, moduleSize);
-              }
+              ctx.fillRect(x, y, moduleSize, moduleSize);
             } else if (overlapsLogo(x, y, moduleSize)) {
-              // Data modules overlapping logo: scaled with feathering
               const centerX = x + moduleSize / 2;
               const centerY = y + moduleSize / 2;
-              const gradient = qrCode.isDark(i, j) ? blackGradientCache : whiteGradientCache;
-              ctx.save();
-              ctx.translate(centerX, centerY);
+              const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, moduleSize / 2);
+              if (qrCode.isDark(i, j)) {
+                gradient.addColorStop(0, 'rgba(0,0,0,0.5)');
+                gradient.addColorStop(1, 'black');
+              } else {
+                gradient.addColorStop(0, 'rgba(255,255,255,0.5)');
+                gradient.addColorStop(1, 'white');
+              }
               ctx.fillStyle = gradient;
-              ctx.fillRect(-scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
-              ctx.restore();
+              ctx.fillRect(x + offset, y + offset, scaledSize, scaledSize);
             } else {
-              // Data modules not overlapping logo: full size, no feathering
               ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
               ctx.fillRect(x, y, moduleSize, moduleSize);
             }
@@ -272,81 +258,60 @@
       }
     }
 
-    // Check if a module is part of functional patterns
-    function isFunctionalModule(i, j, n) {
-      if ((i <= 7 && j <= 7) || (i <= 7 && j >= n - 8) || (i >= n - 8 && j <= 7)) {
-        return true; // Position patterns
-      }
-      if (i == 6 || j == 6) {
-        return true; // Timing patterns
-      }
-      if (n >= 25) {
-        const center = n - 7;
-        if (Math.abs(i - center) <= 2 && Math.abs(j - center) <= 2) {
-          return true; // Alignment pattern
-        }
-      }
-      return false;
-    }
-
-    // Check if a module is part of position patterns (for rounded corners)
-    function isPositionPattern(i, j, n) {
-      return (i <= 7 && j <= 7) || (i <= 7 && j >= n - 8) || (i >= n - 8 && j <= 7);
-    }
-
-    // Draw rounded rectangle
-    function drawRoundedRect(ctx, x, y, width, height, radius) {
+    // Draw fused position pattern
+    function drawPositionPattern(row, col, moduleSize, radius) {
+      const x = col * moduleSize;
+      const y = row * moduleSize;
+      const size = 7 * moduleSize;
+      ctx.fillStyle = 'black';
       ctx.beginPath();
       ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.arcTo(x + width, y, x + width, y + radius, radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
-      ctx.lineTo(x + radius, y + height);
-      ctx.arcTo(x, y + height, x, y + height - radius, radius);
+      ctx.lineTo(x + size - radius, y);
+      ctx.arcTo(x + size, y, x + size, y + radius, radius);
+      ctx.lineTo(x + size, y + size - radius);
+      ctx.arcTo(x + size, y + size, x + size - radius, y + size, radius);
+      ctx.lineTo(x + radius, y + size);
+      ctx.arcTo(x, y + size, x, y + size - radius, radius);
       ctx.lineTo(x, y + radius);
       ctx.arcTo(x, y, x + radius, y, radius);
       ctx.closePath();
       ctx.fill();
     }
 
-    // Download combined image in selected format
+    // Identify position patterns
+    function isPositionPattern(i, j, n) {
+      return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
+    }
+
+    // Identify functional modules
+    function isFunctionalModule(i, j, n) {
+      if ((i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7)) return true;
+      if (i === 6 || j === 6) return true;
+      return false;
+    }
+
+    // Download SVG
     downloadBtn.addEventListener('click', () => {
-      const format = downloadFormat.value;
-      if (format === 'png') {
-        const dataURL = qrCanvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.href = dataURL;
-        link.download = 'qr-code.png';
-        link.click();
-      } else if (format === 'svg') {
-        const svg = generateSVG();
-        const blob = new Blob([svg], { type: 'image/svg+xml' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'qr-code.svg';
-        link.click();
-        URL.revokeObjectURL(url);
-      } else if (format === 'pdf') {
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF();
-        const imgData = qrCanvas.toDataURL('image/png');
-        pdf.addImage(imgData, 'PNG', 0, 0, 210, 210); // A4 size in mm
-        pdf.save('qr-code.pdf');
-      }
+      const svg = generateSVG();
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'qr-code.svg';
+      link.click();
+      URL.revokeObjectURL(url);
     });
 
-    // Generate SVG string with feathering and rounded corners
+    // Generate SVG with scaled pixels and transparency
     function generateSVG() {
       if (!qrCode) return '';
       const n = qrCode.getModuleCount();
-      const moduleSize = 10; // SVG module size
+      const moduleSize = 10;
       const scaledSize = moduleSize * 0.5;
       const offset = (moduleSize - scaledSize) / 2;
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${n * moduleSize}" height="${n * moduleSize}" viewBox="0 0 ${n * moduleSize} ${n * moduleSize}">`;
 
-      // Add logo if present
+      // Add logo
       if (logoImage.src) {
         const logoWidth = logoImage.width * logoScale * (moduleSize / (previewContainer.clientWidth / n));
         const logoHeight = logoImage.height * logoScale * (moduleSize / (previewContainer.clientWidth / n));
@@ -355,38 +320,41 @@
         svg += `<image href="${logoImage.src}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}" />`;
       }
 
-      // Define gradients for feathering
+      // Define gradients
       svg += `<defs>
-        <radialGradient id="blackGradient" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.5">
+        <radialGradient id="blackGradient" cx="0.5" cy="0.5" r="0.5">
           <stop offset="0%" stop-color="black" stop-opacity="0.5"/>
           <stop offset="100%" stop-color="black" stop-opacity="1"/>
         </radialGradient>
-        <radialGradient id="whiteGradient" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.5">
+        <radialGradient id="whiteGradient" cx="0.5" cy="0.5" r="0.5">
           <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
           <stop offset="100%" stop-color="white" stop-opacity="1"/>
         </radialGradient>
       </defs>`;
 
+      // Draw fused position patterns
+      if (roundedCorners.checked) {
+        const cornerRadius = moduleSize * 2;
+        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, cornerRadius);
+        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, cornerRadius);
+        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, cornerRadius);
+      }
+
+      // Draw individual modules
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
+          if (isPositionPattern(i, j, n) && roundedCorners.checked) continue;
           const x = j * moduleSize;
           const y = i * moduleSize;
           if (isFunctionalModule(i, j, n)) {
-            // Functional modules: full size, optional rounded corners
             const fill = qrCode.isDark(i, j) ? 'black' : 'white';
-            if (roundedCorners.checked && isPositionPattern(i, j, n)) {
-              svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}" rx="${moduleSize * 0.2}" ry="${moduleSize * 0.2}"/>`;
-            } else {
-              svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
-            }
-          } else if (overlapsLogo(x / moduleSize, y / moduleSize, 1)) {
-            // Data modules overlapping logo: scaled with feathering
+            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
+          } else if (overlapsLogo(x / moduleSize * (previewContainer.clientWidth / n), y / moduleSize * (previewContainer.clientWidth / n), previewContainer.clientWidth / n)) {
             const gradientId = qrCode.isDark(i, j) ? 'blackGradient' : 'whiteGradient';
             const rectX = x + offset;
             const rectY = y + offset;
             svg += `<rect x="${rectX}" y="${rectY}" width="${scaledSize}" height="${scaledSize}" fill="url(#${gradientId})"/>`;
           } else {
-            // Data modules not overlapping logo: full size, no feathering
             const fill = qrCode.isDark(i, j) ? 'black' : 'white';
             svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
           }
@@ -396,7 +364,15 @@
       return svg;
     }
 
-    // Redraw on window resize
+    // Draw SVG rounded position pattern
+    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius) {
+      const x = col * moduleSize;
+      const y = row * moduleSize;
+      const size = 7 * moduleSize;
+      return `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="black" rx="${radius}" ry="${radius}"/>`;
+    }
+
+    // Redraw on resize
     window.addEventListener('resize', drawPreview);
 
     // Initial draw
