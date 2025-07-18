@@ -14,5 +14,3 @@ A simple QR-Code generator WebApp with a Pixelbrush for tweaking (promptgrammed 
 3. Enable the Pixelbrush tool and tweak your settings
 4. Use your mouse to draw on the QR-Code so that the image becomes visible
 5. Scan the result to check if it works as expected, then download it
-
-https://github.com/RichardScharf/QR-CodeGenerator/raw/refs/heads/main/QR-Code%20generator.html
