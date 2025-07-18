@@ -1,176 +1,245 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Interactive QR Code Generator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <style>
-        #canvas-container {
-            position: relative;
-            width: 600px;
-            height: 600px;
-            border: 1px solid #ccc;
-            margin: 20px 0;
-        }
-        #qr-svg {
-            width: 100%;
-            height: 100%;
-        }
-        #drop-zone {
-            width: 200px;
-            height: 200px;
-            border: 2px dashed #ccc;
-            text-align: center;
-            line-height: 200px;
-            margin: 10px 0;
-        }
-        #drop-zone.dragover {
-            background-color: #e0e0e0;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    #qr-text {
+      width: 80%;
+      max-width: 300px;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #upload-area {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      margin: 10px 0;
+      cursor: pointer;
+      background-color: #fff;
+      text-align: center;
+      width: 80%;
+      max-width: 300px;
+    }
+    #upload-area.dragover {
+      background-color: #e0e0e0;
+    }
+    #preview-container {
+      position: relative;
+      width: 80vw;
+      max-width: 300px;
+      height: 80vw;
+      max-height: 300px;
+      border: 1px solid #000;
+      background-color: #fff;
+    }
+    #qr-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #logo-container {
+      position: absolute;
+      cursor: move;
+      display: none;
+    }
+    #logo-image {
+      width: 100%;
+      height: 100%;
+    }
+    #controls {
+      margin: 10px 0;
+    }
+    #download-btn {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #download-btn:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
-    <h1>Interactive QR Code Generator</h1>
-    <input type="text" id="qr-data" placeholder="Enter QR Code Data">
-    <div id="canvas-container">
-        <div id="qr-svg"></div>
+  <main>
+    <input type="text" id="qr-text" placeholder="Enter text for QR code">
+    <div id="upload-area">
+      <p>Drag and drop or click to upload logo</p>
+      <input type="file" id="logo-upload" accept="image/*">
     </div>
-    <div id="drop-zone">Drop Logo Here</div>
-    <input type="file" id="file-input" accept="image/*" style="display: none;">
-    <label>Logo X: <input type="number" id="logo-x" value="0"></label>
-    <label>Logo Y: <input type="number" id="logo-y" value="0"></label>
-    <label>Logo Scale: <input type="number" id="logo-scale" value="1" step="0.1"></label>
-    <button id="download-btn">Download SVG</button>
+    <div id="controls">
+      <label for="scale-slider">Logo scale:</label>
+      <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
+    </div>
+    <div id="preview-container">
+      <canvas id="qr-canvas"></canvas>
+      <div id="logo-container">
+        <img id="logo-image" src="" alt="Logo">
+      </div>
+    </div>
+    <button id="download-btn">Download QR Code</button>
+  </main>
+  <script>
+    const qrCanvas = document.getElementById('qr-canvas');
+    const qrText = document.getElementById('qr-text');
+    const logoUpload = document.getElementById('logo-upload');
+    const logoImage = document.getElementById('logo-image');
+    const scaleSlider = document.getElementById('scale-slider');
+    const logoContainer = document.getElementById('logo-container');
+    const previewContainer = document.getElementById('preview-container');
+    const uploadArea = document.getElementById('upload-area');
+    const downloadBtn = document.getElementById('download-btn');
 
-    <script>
-        const qrDataInput = document.getElementById('qr-data');
-        const qrSvgContainer = document.getElementById('qr-svg');
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const logoXInput = document.getElementById('logo-x');
-        const logoYInput = document.getElementById('logo-y');
-        const logoScaleInput = document.getElementById('logo-scale');
-        const downloadBtn = document.getElementById('download-btn');
+    // Initialize QRious with dynamic size
+    let qr = new QRious({
+      element: qrCanvas,
+      value: '',
+      size: previewContainer.clientWidth,
+    });
 
-        let qrMatrix = null;
-        let N = 0;
-        const moduleSize = 10; // Size of each QR module in pixels
-        let logoImg = null;
+    // Update QR code when text changes
+    qrText.addEventListener('input', () => {
+      qr.value = qrText.value;
+    });
 
-        // Generate QR code on text input
-        qrDataInput.addEventListener('input', generateQR);
+    // Variables for logo handling
+    let initialWidth, initialHeight;
+    let isDragging = false;
+    let startX, startY;
 
-        // Handle file upload via file input
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) {
-                handleFile(e.target.files[0]);
-            }
-        });
+    // Handle file input logo upload
+    logoUpload.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        loadLogo(file);
+      }
+    });
 
-        // Drag-and-drop functionality
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
+    // Handle drag-and-drop
+    uploadArea.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
 
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
+    uploadArea.addEventListener('dragleave', (event) => {
+      uploadArea.classList.remove('dragover');
+    });
 
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file) handleFile(file);
-        });
+    uploadArea.addEventListener('drop', (event) => {
+      event.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const file = event.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        loadLogo(file);
+      }
+    });
 
-        dropZone.addEventListener('click', () => fileInput.click());
+    // Load and position logo
+    function loadLogo(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        logoImage.src = e.target.result;
+        logoImage.onload = () => {
+          initialWidth = logoImage.naturalWidth;
+          initialHeight = logoImage.naturalHeight;
+          const scale = 0.5; // Initial scale
+          logoContainer.style.width = `${initialWidth * scale}px`;
+          logoContainer.style.height = `${initialHeight * scale}px`;
+          const containerWidth = previewContainer.clientWidth;
+          const containerHeight = previewContainer.clientHeight;
+          logoContainer.style.left = `${(containerWidth - initialWidth * scale) / 2}px`;
+          logoContainer.style.top = `${(containerHeight - initialHeight * scale) / 2}px`;
+          logoContainer.style.display = 'block';
+        };
+      };
+      reader.readAsDataURL(file);
+    }
 
-        // Logo position and scale inputs
-        [logoXInput, logoYInput, logoScaleInput].forEach(input => {
-            input.addEventListener('input', drawSvg);
-        });
+    // Scale logo with slider
+    scaleSlider.addEventListener('input', () => {
+      const scale = parseFloat(scaleSlider.value);
+      logoContainer.style.width = `${initialWidth * scale}px`;
+      logoContainer.style.height = `${initialHeight * scale}px`;
+    });
 
-        // Download SVG
-        downloadBtn.addEventListener('click', () => {
-            const svgContent = qrSvgContainer.innerHTML;
-            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'qrcode.svg';
-            a.click();
-            URL.revokeObjectURL(url);
-        });
+    // Drag logo
+    logoContainer.addEventListener('mousedown', (event) => {
+      isDragging = true;
+      startX = event.clientX - logoContainer.offsetLeft;
+      startY = event.clientY - logoContainer.offsetTop;
+    });
 
-        function handleFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                logoImg = new Image();
-                logoImg.onload = () => {
-                    console.log('Logo loaded:', logoImg.width, logoImg.height);
-                    drawSvg();
-                };
-                logoImg.onerror = () => console.error('Error loading logo image');
-                logoImg.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
+    document.addEventListener('mousemove', (event) => {
+      if (isDragging) {
+        let x = event.clientX - startX;
+        let y = event.clientY - startY;
+        const minX = 0;
+        const minY = 0;
+        const maxX = previewContainer.clientWidth - logoContainer.offsetWidth;
+        const maxY = previewContainer.clientHeight - logoContainer.offsetHeight;
+        x = Math.max(minX, Math.min(x, maxX));
+        y = Math.max(minY, Math.min(y, maxY));
+        logoContainer.style.left = `${x}px`;
+        logoContainer.style.top = `${y}px`;
+      }
+    });
 
-        function generateQR() {
-            const data = qrDataInput.value.trim();
-            if (!data) {
-                qrSvgContainer.innerHTML = '';
-                qrMatrix = null;
-                return;
-            }
-            const qr = new QRCode(-1, QRCode.CorrectLevel.H);
-            qr.addData(data);
-            qr.make();
-            N = qr.getModuleCount();
-            qrMatrix = Array(N).fill().map(() => Array(N).fill(false));
-            for (let row = 0; row < N; row++) {
-                for (let col = 0; col < N; col++) {
-                    qrMatrix[row][col] = qr.isDark(row, col);
-                }
-            }
-            drawSvg();
-        }
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
 
-        function drawSvg() {
-            if (!qrMatrix) {
-                qrSvgContainer.innerHTML = '';
-                return;
-            }
+    // Download combined image
+    downloadBtn.addEventListener('click', () => {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = qrCanvas.width;
+      tempCanvas.height = qrCanvas.height;
+      const ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(qrCanvas, 0, 0);
+      if (logoImage.src) {
+        const logoX = parseFloat(logoContainer.style.left);
+        const logoY = parseFloat(logoContainer.style.top);
+        const logoWidth = parseFloat(logoContainer.style.width);
+        const logoHeight = parseFloat(logoContainer.style.height);
+        ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+      }
+      const dataURL = tempCanvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = 'qr-code.png';
+      link.click();
+    });
 
-            const logoX = parseFloat(logoXInput.value) || 0;
-            const logoY = parseFloat(logoYInput.value) || 0;
-            const logoScale = parseFloat(logoScaleInput.value) || 1;
-
-            // Use viewBox for scalability and set SVG to fill container
-            let svgContent = `<svg width="100%" height="100%" viewBox="0 0 ${moduleSize * N} ${moduleSize * N}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">`;
-
-            // Draw QR code modules
-            for (let row = 0; row < N; row++) {
-                for (let col = 0; col < N; col++) {
-                    if (qrMatrix[row][col]) {
-                        const x = col * moduleSize;
-                        const y = row * moduleSize;
-                        svgContent += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="black" />`;
-                    }
-                }
-            }
-
-            // Draw logo if available
-            if (logoImg && logoImg.complete && logoImg.naturalWidth !== 0) {
-                const w = logoImg.width * logoScale;
-                const h = logoImg.height * logoScale;
-                svgContent += `<image href="${logoImg.src}" x="${logoX}" y="${logoY}" width="${w}" height="${h}" />`;
-            }
-
-            svgContent += `</svg>`;
-            qrSvgContainer.innerHTML = svgContent;
-        }
-    </script>
+    // Resize preview with UI
+    window.addEventListener('resize', () => {
+      const size = previewContainer.clientWidth;
+      qr.size = size;
+      qrCanvas.width = size;
+      qrCanvas.height = size;
+      qr.value = qrText.value; // Redraw QR code
+    });
+  </script>
 </body>
 </html>
