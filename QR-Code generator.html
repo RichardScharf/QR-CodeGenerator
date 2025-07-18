@@ -95,9 +95,11 @@
       <label for="download-format">Download Format:</label>
       <select id="download-format">
         <option value="svg" selected>SVG</option>
-        <option value="pdf">PDF</option>
         <option value="png">PNG</option>
+        <option value="pdf">PDF</option>
       </select>
+      <label for="rounded-corners">Rounded Corners:</label>
+      <input type="checkbox" id="rounded-corners">
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
@@ -110,6 +112,7 @@
     const scaleSlider = document.getElementById('scale-slider');
     const errorCorrection = document.getElementById('error-correction');
     const downloadFormat = document.getElementById('download-format');
+    const roundedCorners = document.getElementById('rounded-corners');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
@@ -119,6 +122,9 @@
     let logoImage = new Image();
     let logoScale = 1;
     let qrCode = null;
+    let logoBounds = null;
+    let blackGradientCache = null;
+    let whiteGradientCache = null;
 
     // Handle logo upload
     logoUpload.addEventListener('change', (event) => {
@@ -145,7 +151,10 @@
     function loadLogo(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        logoImage.onload = drawPreview;
+        logoImage.onload = () => {
+          updateLogoBounds();
+          drawPreview();
+        };
         logoImage.src = e.target.result;
       };
       reader.readAsDataURL(file);
@@ -154,6 +163,7 @@
     // Scale logo with slider
     scaleSlider.addEventListener('input', () => {
       logoScale = parseFloat(scaleSlider.value);
+      updateLogoBounds();
       drawPreview();
     });
 
@@ -161,7 +171,7 @@
     function generateQRCode() {
       if (qrText.value) {
         const ecLevel = errorCorrection.value;
-        qrCode = qrcode(0, ecLevel); // Auto version, selected error correction
+        qrCode = qrcode(0, ecLevel);
         qrCode.addData(qrText.value);
         qrCode.make();
         drawPreview();
@@ -173,6 +183,94 @@
 
     qrText.addEventListener('input', generateQRCode);
     errorCorrection.addEventListener('change', generateQRCode);
+    roundedCorners.addEventListener('change', drawPreview);
+
+    // Update logo bounds for overlap checks
+    function updateLogoBounds() {
+      if (!logoImage.src) return;
+      const canvasSize = previewContainer.clientWidth;
+      const logoWidth = logoImage.width * logoScale;
+      const logoHeight = logoImage.height * logoScale;
+      const x = (canvasSize - logoWidth) / 2;
+      const y = (canvasSize - logoHeight) / 2;
+      logoBounds = { x, y, width: logoWidth, height: logoHeight };
+    }
+
+    // Check if module overlaps with logo
+    function overlapsLogo(x, y, moduleSize) {
+      if (!logoBounds) return false;
+      return (
+        x + moduleSize > logoBounds.x &&
+        x < logoBounds.x + logoBounds.width &&
+        y + moduleSize > logoBounds.y &&
+        y < logoBounds.y + logoBounds.height
+      );
+    }
+
+    // Draw preview with optimized feathering
+    function drawPreview() {
+      const canvasSize = previewContainer.clientWidth;
+      qrCanvas.width = canvasSize;
+      qrCanvas.height = canvasSize;
+      ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+      // Draw logo in background
+      if (logoImage.src) {
+        const x = logoBounds.x;
+        const y = logoBounds.y;
+        const logoWidth = logoBounds.width;
+        const logoHeight = logoBounds.height;
+        ctx.drawImage(logoImage, x, y, logoWidth, logoHeight);
+      }
+
+      // Draw QR code
+      if (qrCode) {
+        const n = qrCode.getModuleCount();
+        const moduleSize = canvasSize / n;
+        const scaledSize = moduleSize * 0.5;
+        const offset = (moduleSize - scaledSize) / 2;
+
+        // Cache gradients for performance
+        if (!blackGradientCache || !whiteGradientCache) {
+          blackGradientCache = ctx.createRadialGradient(0, 0, 0, 0, 0, moduleSize / 2);
+          blackGradientCache.addColorStop(0, 'rgba(0,0,0,0.5)');
+          blackGradientCache.addColorStop(1, 'black');
+          whiteGradientCache = ctx.createRadialGradient(0, 0, 0, 0, 0, moduleSize / 2);
+          whiteGradientCache.addColorStop(0, 'rgba(255,255,255,0.5)');
+          whiteGradientCache.addColorStop(1, 'white');
+        }
+
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            const x = j * moduleSize;
+            const y = i * moduleSize;
+            if (isFunctionalModule(i, j, n)) {
+              // Functional modules: full size, no feathering
+              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
+              if (roundedCorners.checked && isPositionPattern(i, j, n)) {
+                drawRoundedRect(ctx, x, y, moduleSize, moduleSize, moduleSize * 0.2);
+              } else {
+                ctx.fillRect(x, y, moduleSize, moduleSize);
+              }
+            } else if (overlapsLogo(x, y, moduleSize)) {
+              // Data modules overlapping logo: scaled with feathering
+              const centerX = x + moduleSize / 2;
+              const centerY = y + moduleSize / 2;
+              const gradient = qrCode.isDark(i, j) ? blackGradientCache : whiteGradientCache;
+              ctx.save();
+              ctx.translate(centerX, centerY);
+              ctx.fillStyle = gradient;
+              ctx.fillRect(-scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
+              ctx.restore();
+            } else {
+              // Data modules not overlapping logo: full size, no feathering
+              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
+              ctx.fillRect(x, y, moduleSize, moduleSize);
+            }
+          }
+        }
+      }
+    }
 
     // Check if a module is part of functional patterns
     function isFunctionalModule(i, j, n) {
@@ -191,75 +289,25 @@
       return false;
     }
 
-    // Check if module overlaps with logo
-    function overlapsLogo(x, y, moduleSize, canvasSize) {
-      if (!logoImage.src) return false;
-      const logoWidth = logoImage.width * logoScale;
-      const logoHeight = logoImage.height * logoScale;
-      const logoX = (canvasSize - logoWidth) / 2;
-      const logoY = (canvasSize - logoHeight) / 2;
-      return (
-        x + moduleSize > logoX &&
-        x < logoX + logoWidth &&
-        y + moduleSize > logoY &&
-        y < logoY + logoHeight
-      );
+    // Check if a module is part of position patterns (for rounded corners)
+    function isPositionPattern(i, j, n) {
+      return (i <= 7 && j <= 7) || (i <= 7 && j >= n - 8) || (i >= n - 8 && j <= 7);
     }
 
-    // Draw preview with adjusted feathering
-    function drawPreview() {
-      const canvasSize = previewContainer.clientWidth;
-      qrCanvas.width = canvasSize;
-      qrCanvas.height = canvasSize;
-      ctx.clearRect(0, 0, canvasSize, canvasSize);
-
-      // Draw logo in background
-      if (logoImage.src) {
-        const logoWidth = logoImage.width * logoScale;
-        const logoHeight = logoImage.height * logoScale;
-        const x = (canvasSize - logoWidth) / 2;
-        const y = (canvasSize - logoHeight) / 2;
-        ctx.drawImage(logoImage, x, y, logoWidth, logoHeight);
-      }
-
-      // Draw QR code
-      if (qrCode) {
-        const n = qrCode.getModuleCount();
-        const moduleSize = canvasSize / n;
-
-        for (let i = 0; i < n; i++) {
-          for (let j = 0; j < n; j++) {
-            const x = j * moduleSize;
-            const y = i * moduleSize;
-            if (isFunctionalModule(i, j, n)) {
-              // Functional modules: full size, no feathering
-              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
-              ctx.fillRect(x, y, moduleSize, moduleSize);
-            } else if (overlapsLogo(x, y, moduleSize, canvasSize)) {
-              // Data modules overlapping logo: scaled with feathering
-              const centerX = x + moduleSize / 2;
-              const centerY = y + moduleSize / 2;
-              const gradient = ctx.createRadialGradient(
-                centerX, centerY, 0, centerX, centerY, moduleSize / 2
-              );
-              if (qrCode.isDark(i, j)) {
-                gradient.addColorStop(0, 'rgba(0,0,0,0.5)'); // 50% transparent center
-                gradient.addColorStop(1, 'black');            // Opaque edge
-              } else {
-                gradient.addColorStop(0, 'rgba(255,255,255,0.5)');
-                gradient.addColorStop(1, 'white');
-              }
-              ctx.fillStyle = gradient;
-              const scaledSize = moduleSize * 0.5;
-              ctx.fillRect(x + (moduleSize - scaledSize) / 2, y + (moduleSize - scaledSize) / 2, scaledSize, scaledSize);
-            } else {
-              // Data modules not overlapping logo: full size, no feathering
-              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
-              ctx.fillRect(x, y, moduleSize, moduleSize);
-            }
-          }
-        }
-      }
+    // Draw rounded rectangle
+    function drawRoundedRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.arcTo(x + width, y, x + width, y + radius, radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+      ctx.lineTo(x + radius, y + height);
+      ctx.arcTo(x, y + height, x, y + height - radius, radius);
+      ctx.lineTo(x, y + radius);
+      ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.closePath();
+      ctx.fill();
     }
 
     // Download combined image in selected format
@@ -289,24 +337,58 @@
       }
     });
 
-    // Generate SVG string (full modules, no feathering for simplicity)
+    // Generate SVG string with feathering and rounded corners
     function generateSVG() {
+      if (!qrCode) return '';
       const n = qrCode.getModuleCount();
       const moduleSize = 10; // SVG module size
+      const scaledSize = moduleSize * 0.5;
+      const offset = (moduleSize - scaledSize) / 2;
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${n * moduleSize}" height="${n * moduleSize}" viewBox="0 0 ${n * moduleSize} ${n * moduleSize}">`;
+
+      // Add logo if present
       if (logoImage.src) {
-        const logoWidth = logoImage.width * logoScale;
-        const logoHeight = logoImage.height * logoScale;
+        const logoWidth = logoImage.width * logoScale * (moduleSize / (previewContainer.clientWidth / n));
+        const logoHeight = logoImage.height * logoScale * (moduleSize / (previewContainer.clientWidth / n));
         const x = (n * moduleSize - logoWidth) / 2;
         const y = (n * moduleSize - logoHeight) / 2;
         svg += `<image href="${logoImage.src}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}" />`;
       }
+
+      // Define gradients for feathering
+      svg += `<defs>
+        <radialGradient id="blackGradient" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.5">
+          <stop offset="0%" stop-color="black" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="black" stop-opacity="1"/>
+        </radialGradient>
+        <radialGradient id="whiteGradient" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.5">
+          <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="white" stop-opacity="1"/>
+        </radialGradient>
+      </defs>`;
+
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
-          if (qrCode.isDark(i, j)) {
-            const x = j * moduleSize;
-            const y = i * moduleSize;
-            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="black" />`;
+          const x = j * moduleSize;
+          const y = i * moduleSize;
+          if (isFunctionalModule(i, j, n)) {
+            // Functional modules: full size, optional rounded corners
+            const fill = qrCode.isDark(i, j) ? 'black' : 'white';
+            if (roundedCorners.checked && isPositionPattern(i, j, n)) {
+              svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}" rx="${moduleSize * 0.2}" ry="${moduleSize * 0.2}"/>`;
+            } else {
+              svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
+            }
+          } else if (overlapsLogo(x / moduleSize, y / moduleSize, 1)) {
+            // Data modules overlapping logo: scaled with feathering
+            const gradientId = qrCode.isDark(i, j) ? 'blackGradient' : 'whiteGradient';
+            const rectX = x + offset;
+            const rectY = y + offset;
+            svg += `<rect x="${rectX}" y="${rectY}" width="${scaledSize}" height="${scaledSize}" fill="url(#${gradientId})"/>`;
+          } else {
+            // Data modules not overlapping logo: full size, no feathering
+            const fill = qrCode.isDark(i, j) ? 'black' : 'white';
+            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
           }
         }
       }
