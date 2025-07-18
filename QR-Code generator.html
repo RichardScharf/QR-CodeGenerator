@@ -3,22 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QR Code Generator</title>
+  <title>Enhanced QR Code Generator</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #f0f0f0; }
-    main { display: flex; flex-direction: column; align-items: center; padding: 20px; width: 100%; max-width: 600px; }
-    #qr-text { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
-    #upload-area { border: 2px dashed #ccc; padding: 20px; margin: 10px 0; cursor: pointer; background-color: #fff; text-align: center; width: 100%; }
-    #upload-area.dragover { background-color: #e0e0e0; }
-    #preview-container { position: relative; width: 100%; max-width: 300px; height: 300px; border: 1px solid #000; background-color: #fff; margin: 10px 0; }
-    #qr-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    #brush-silhouette { position: absolute; pointer-events: none; border: 1px dashed #000; border-radius: 50%; display: none; }
-    #controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-    #brush-tool { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-    #download-btn, #brush-toggle, #undo-btn, #redo-btn, #reset-rotation-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
-    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover, #reset-rotation-btn:hover { background-color: #0056b3; }
-    .control-group { display: flex; flex-direction: column; align-items: center; }
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      width: 100%;
+      max-width: 600px;
+    }
+    #qr-text {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #upload-area {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      margin: 10px 0;
+      cursor: pointer;
+      background-color: #fff;
+      text-align: center;
+      width: 100%;
+    }
+    #upload-area.dragover {
+      background-color: #e0e0e0;
+    }
+    #preview-container {
+      position: relative;
+      width: 100%;
+      max-width: 300px;
+      height: 300px;
+      border: 1px solid #000;
+      background-color: #fff;
+      margin: 10px 0;
+    }
+    #qr-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #brush-silhouette {
+      position: absolute;
+      pointer-events: none;
+      border: 1px dashed #000;
+      border-radius: 50%;
+      display: none;
+    }
+    #controls, #brush-tool {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 5px;
+    }
+    #lock-options, #jitter-options, #reset-options {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    #lock-options div, #jitter-options div {
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
@@ -30,7 +109,7 @@
     </div>
     <div id="controls">
       <div class="control-group">
-        <label for="scale-slider">Logo scale:</label>
+        <label for="scale-slider">Logo Scale:</label>
         <input type="range" id="scale-slider" min="0.1" max="2" step="0.1" value="1">
       </div>
       <div class="control-group">
@@ -68,25 +147,33 @@
           <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
         </div>
         <div class="control-group">
-          <label for="rotation-speed">Rotation Speed (degrees):</label>
-          <input type="range" id="rotation-speed" min="0" max="10" step="0.5" value="0">
+          <label for="rotation-speed">Rotation Speed (-10 to 10 degrees):</label>
+          <input type="range" id="rotation-speed" min="-10" max="10" step="0.5" value="0">
         </div>
-        <div class="control-group">
-          <label for="jitter-scale">Jitter Scale:</label>
-          <input type="checkbox" id="jitter-scale">
+        <div id="lock-options" class="control-group">
+          <label>Lock Options:</label>
+          <div>
+            <input type="checkbox" id="lock-scale"> <label for="lock-scale">Scale</label>
+            <input type="checkbox" id="lock-rotation"> <label for="lock-rotation">Rotation</label>
+            <input type="checkbox" id="lock-transparency"> <label for="lock-transparency">Transparency</label>
+          </div>
         </div>
-        <div class="control-group">
-          <label for="jitter-rotation">Jitter Rotation:</label>
-          <input type="checkbox" id="jitter-rotation">
-        </div>
-        <div class="control-group">
-          <label for="jitter-color">Jitter Color:</label>
-          <input type="checkbox" id="jitter-color">
+        <div id="jitter-options" class="control-group">
+          <label>Jitter Options:</label>
+          <div>
+            <input type="checkbox" id="jitter-scale"> <label for="jitter-scale">Scale</label>
+            <input type="checkbox" id="jitter-rotation"> <label for="jitter-rotation">Rotation</label>
+            <input type="checkbox" id="jitter-color"> <label for="jitter-color">Color</label>
+          </div>
         </div>
         <button id="brush-toggle">Enable Brush</button>
-        <button id="reset-rotation-btn">Reset Rotation</button>
-        <button id="undo-btn" disabled>Undo</button>
-        <button id="redo-btn" disabled>Redo</button>
+        <div id="reset-options" class="control-group">
+          <label>Reset Options:</label>
+          <button id="reset-colors-btn">Reset Colors</button>
+          <button id="reset-scale-btn">Reset Scale</button>
+          <button id="reset-transparency-btn">Reset Transparency</button>
+          <button id="reset-all-btn">Reset All</button>
+        </div>
       </div>
     </div>
     <div id="preview-container">
@@ -107,13 +194,17 @@
     const brushIntensity = document.getElementById('brush-intensity');
     const brushTransparency = document.getElementById('brush-transparency');
     const rotationSpeed = document.getElementById('rotation-speed');
+    const lockScale = document.getElementById('lock-scale');
+    const lockRotation = document.getElementById('lock-rotation');
+    const lockTransparency = document.getElementById('lock-transparency');
     const jitterScale = document.getElementById('jitter-scale');
     const jitterRotation = document.getElementById('jitter-rotation');
     const jitterColor = document.getElementById('jitter-color');
     const brushToggle = document.getElementById('brush-toggle');
-    const resetRotationBtn = document.getElementById('reset-rotation-btn');
-    const undoBtn = document.getElementById('undo-btn');
-    const redoBtn = document.getElementById('redo-btn');
+    const resetColorsBtn = document.getElementById('reset-colors-btn');
+    const resetScaleBtn = document.getElementById('reset-scale-btn');
+    const resetTransparencyBtn = document.getElementById('reset-transparency-btn');
+    const resetAllBtn = document.getElementById('reset-all-btn');
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
@@ -127,10 +218,8 @@
     let logoBounds = null;
     let logoSVGCode = null;
     let brushedModules = new Map(); // { scale, transparency, rotation, colorOffset }
-    let brushHistory = [];
-    let historyIndex = -1;
-    let isBrushing = false;
     let brushEnabled = false;
+    let isBrushing = false;
 
     // Handle logo upload
     uploadArea.addEventListener('click', () => logoUpload.click());
@@ -138,8 +227,13 @@
       const file = event.target.files[0];
       if (file) loadLogo(file);
     });
-    uploadArea.addEventListener('dragover', (event) => { event.preventDefault(); uploadArea.classList.add('dragover'); });
-    uploadArea.addEventListener('dragleave', () => { uploadArea.classList.remove('dragover'); });
+    uploadArea.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('dragover');
+    });
     uploadArea.addEventListener('drop', (event) => {
       event.preventDefault();
       uploadArea.classList.remove('dragover');
@@ -167,24 +261,32 @@
       }
     }
 
-    // Scale logo with slider
     scaleSlider.addEventListener('input', () => {
       logoScale = parseFloat(scaleSlider.value);
       updateLogoBounds();
       drawPreview();
     });
 
+    function updateLogoBounds() {
+      if (!logoImage.src) return;
+      const canvasSize = previewContainer.clientWidth;
+      const logoWidth = logoImage.width * logoScale;
+      const logoHeight = logoImage.height * logoScale;
+      logoBounds = {
+        x: (canvasSize - logoWidth) / 2,
+        y: (canvasSize - logoHeight) / 2,
+        width: logoWidth,
+        height: logoHeight
+      };
+    }
+
     // Generate QR code
     function generateQRCode() {
       if (qrText.value) {
-        const ecLevel = errorCorrection.value;
-        qrCode = qrcode(0, ecLevel);
+        qrCode = qrcode(0, errorCorrection.value);
         qrCode.addData(qrText.value);
         qrCode.make();
         brushedModules.clear();
-        brushHistory = [];
-        historyIndex = -1;
-        updateUndoRedoButtons();
         drawPreview();
       } else {
         qrCode = null;
@@ -196,24 +298,13 @@
     smoothCorners.addEventListener('change', drawPreview);
     transparentCorners.addEventListener('change', drawPreview);
 
-    // Update logo bounds
-    function updateLogoBounds() {
-      if (!logoImage.src) return;
-      const canvasSize = previewContainer.clientWidth;
-      const logoWidth = logoImage.width * logoScale;
-      const logoHeight = logoImage.height * logoScale;
-      const x = (canvasSize - logoWidth) / 2;
-      const y = (canvasSize - logoHeight) / 2;
-      logoBounds = { x, y, width: logoWidth, height: logoHeight };
-    }
-
     // Get module properties
     function getModuleProperties(i, j) {
-      const moduleKey = `${i},${j}`;
-      return brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
+      const key = `${i},${j}`;
+      return brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
     }
 
-    // Draw preview with silhouette, transparent corners, and inverted transparency gradient
+    // Draw preview
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -228,7 +319,6 @@
         const n = qrCode.getModuleCount();
         const moduleSize = canvasSize / n;
 
-        // Draw position patterns if smooth corners are enabled
         if (smoothCorners.checked) {
           drawPositionPatternCanvas(0, 0, moduleSize, transparentCorners.checked);
           drawPositionPatternCanvas(0, n - 7, moduleSize, transparentCorners.checked);
@@ -279,14 +369,10 @@
     function drawRoundedRect(ctx, x, y, width, height, radius) {
       ctx.beginPath();
       ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.arcTo(x + width, y, x + width, y + radius, radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
-      ctx.lineTo(x + radius, y + height);
-      ctx.arcTo(x, y + height, x, y + height - radius, radius);
-      ctx.lineTo(x, y + radius);
-      ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.arcTo(x + width, y, x + width, y + height, radius);
+      ctx.arcTo(x + width, y + height, x, y + height, radius);
+      ctx.arcTo(x, y + height, x, y, radius);
+      ctx.arcTo(x, y, x + width, y, radius);
       ctx.closePath();
       ctx.fill();
     }
@@ -295,7 +381,7 @@
       return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
     }
 
-    // Brush tool logic
+    // Brush tool
     brushToggle.addEventListener('click', () => {
       brushEnabled = !brushEnabled;
       brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
@@ -303,13 +389,12 @@
       brushSilhouette.style.display = brushEnabled ? 'block' : 'none';
     });
 
-    // Brush silhouette
     qrCanvas.addEventListener('mousemove', (event) => {
       if (brushEnabled) {
         const rect = qrCanvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
-        const radius = parseInt(brushRadius.value) * (rect.width / qrCode.getModuleCount());
+        const radius = parseInt(brushRadius.value) * (rect.width / (qrCode?.getModuleCount() || 1));
         brushSilhouette.style.width = `${radius * 2}px`;
         brushSilhouette.style.height = `${radius * 2}px`;
         brushSilhouette.style.left = `${x - radius}px`;
@@ -329,13 +414,7 @@
     });
 
     qrCanvas.addEventListener('mouseup', () => {
-      if (isBrushing) {
-        brushHistory = brushHistory.slice(0, historyIndex + 1);
-        brushHistory.push(new Map(brushedModules));
-        historyIndex++;
-        updateUndoRedoButtons();
-        isBrushing = false;
-      }
+      isBrushing = false;
     });
 
     function applyBrush(event) {
@@ -348,8 +427,8 @@
       const minScale = parseFloat(brushStrength.value);
       const maxTransparency = parseFloat(brushTransparency.value);
       const rotationDelta = parseFloat(rotationSpeed.value);
-      const centerJ = Math.floor(x * n);
       const centerI = Math.floor(y * n);
+      const centerJ = Math.floor(x * n);
       const maxDist = radius * radius;
 
       for (let di = -radius; di <= radius; di++) {
@@ -359,32 +438,38 @@
           if (i >= 0 && i < n && j >= 0 && j < n) {
             const dist = di * di + dj * dj;
             if (dist <= maxDist) {
-              const moduleKey = `${i},${j}`;
-              const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
+              const key = `${i},${j}`;
+              const current = brushedModules.get(key) || { scale: 1, transparency: 0, rotation: 0, colorOffset: 0 };
               const feather = 1 - (dist / maxDist);
               const delta = intensity * feather;
-              let newScale = current.scale + delta * (minScale - current.scale);
-              newScale = Math.max(0.1, Math.min(1, newScale)); // Clamp scale between 0.1 and 1
-              const transparencyIncrease = delta;
-              const newTransparency = Math.min(maxTransparency, current.transparency + transparencyIncrease);
-              let newRotation = current.rotation;
-              if (rotationDelta > 0) {
-                newRotation += rotationDelta * feather;
+
+              if (!lockScale.checked) {
+                const targetScale = minScale;
+                current.scale += delta * (targetScale - current.scale);
+                current.scale = Math.max(0.1, Math.min(1, current.scale));
+                if (jitterScale.checked) {
+                  current.scale *= 1 + (Math.random() - 0.5) * 0.1 * feather;
+                  current.scale = Math.max(0.1, Math.min(1, current.scale));
+                }
               }
-              if (jitterRotation.checked) {
-                newRotation += (Math.random() - 0.5) * 4 * feather; // Jitter rotation ±2 degrees
+
+              if (!lockTransparency.checked) {
+                current.transparency = Math.min(maxTransparency, current.transparency + delta);
               }
-              if (jitterScale.checked) {
-                const jitterFactor = 1 + (Math.random() - 0.5) * 0.1 * feather;
-                newScale *= jitterFactor;
-                newScale = Math.max(0.1, Math.min(1, newScale)); // Clamp scale with jitter
+
+              if (!lockRotation.checked && rotationDelta !== 0) {
+                current.rotation += rotationDelta * feather;
+                if (jitterRotation.checked) {
+                  current.rotation += (Math.random() - 0.5) * 4 * feather;
+                }
               }
-              let colorOffset = current.colorOffset;
+
               if (jitterColor.checked) {
-                colorOffset += (Math.random() - 0.5) * 20 * feather; // Jitter color brightness ±10%
-                colorOffset = Math.max(-50, Math.min(50, colorOffset)); // Clamp color offset
+                current.colorOffset += (Math.random() - 0.5) * 20 * feather;
+                current.colorOffset = Math.max(-50, Math.min(50, current.colorOffset));
               }
-              brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency, rotation: newRotation, colorOffset });
+
+              brushedModules.set(key, current);
             }
           }
         }
@@ -392,44 +477,37 @@
       drawPreview();
     }
 
-    // Reset rotation
-    resetRotationBtn.addEventListener('click', () => {
+    // Reset buttons
+    resetColorsBtn.addEventListener('click', () => {
       for (let [key, value] of brushedModules) {
-        value.rotation = 0;
+        value.colorOffset = 0;
         brushedModules.set(key, value);
       }
-      brushHistory = brushHistory.slice(0, historyIndex + 1);
-      brushHistory.push(new Map(brushedModules));
-      historyIndex++;
-      updateUndoRedoButtons();
       drawPreview();
     });
 
-    // Undo/Redo logic
-    undoBtn.addEventListener('click', () => {
-      if (historyIndex > 0) {
-        historyIndex--;
-        brushedModules = new Map(brushHistory[historyIndex]);
-        updateUndoRedoButtons();
-        drawPreview();
+    resetScaleBtn.addEventListener('click', () => {
+      for (let [key, value] of brushedModules) {
+        value.scale = 1;
+        brushedModules.set(key, value);
       }
+      drawPreview();
     });
 
-    redoBtn.addEventListener('click', () => {
-      if (historyIndex < brushHistory.length - 1) {
-        historyIndex++;
-        brushedModules = new Map(brushHistory[historyIndex]);
-        updateUndoRedoButtons();
-        drawPreview();
+    resetTransparencyBtn.addEventListener('click', () => {
+      for (let [key, value] of brushedModules) {
+        value.transparency = 0;
+        brushedModules.set(key, value);
       }
+      drawPreview();
     });
 
-    function updateUndoRedoButtons() {
-      undoBtn.disabled = historyIndex <= 0;
-      redoBtn.disabled = historyIndex >= brushHistory.length - 1;
-    }
+    resetAllBtn.addEventListener('click', () => {
+      brushedModules.clear();
+      drawPreview();
+    });
 
-    // Download SVG with all effects
+    // Download SVG
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -498,9 +576,9 @@
       const x = col * moduleSize;
       const y = row * moduleSize;
       let svg = '';
-      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius}" ry="${radius}"/>`;
-      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" fill-opacity="${1 - transparency}" rx="${radius / 1.25}" ry="${radius / 1.25}"/>`;
-      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius / 2}" ry="${radius / 2}"/>`;
+      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius}"/>`;
+      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" fill-opacity="${1 - transparency}" rx="${radius / 1.25}"/>`;
+      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" fill-opacity="${1 - transparency}" rx="${radius / 2}"/>`;
       return svg;
     }
 
