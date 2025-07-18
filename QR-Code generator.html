@@ -6,72 +6,16 @@
   <title>QR Code Generator</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      background-color: #f0f0f0;
-    }
-    main {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-    #qr-text {
-      width: 80%;
-      max-width: 300px;
-      padding: 10px;
-      margin-bottom: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    #upload-area {
-      border: 2px dashed #ccc;
-      padding: 20px;
-      margin: 10px 0;
-      cursor: pointer;
-      background-color: #fff;
-      text-align: center;
-      width: 80%;
-      max-width: 300px;
-    }
-    #upload-area.dragover {
-      background-color: #e0e0e0;
-    }
-    #preview-container {
-      position: relative;
-      width: 80vw;
-      max-width: 300px;
-      height: 80vw;
-      max-height: 300px;
-      border: 1px solid #000;
-      background-color: #fff;
-    }
-    #qr-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
-    #controls {
-      margin: 10px 0;
-    }
-    #download-btn {
-      padding: 10px 20px;
-      background-color: #007bff;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    #download-btn:hover {
-      background-color: #0056b3;
-    }
+    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #f0f0f0; }
+    main { display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    #qr-text { width: 80%; max-width: 300px; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+    #upload-area { border: 2px dashed #ccc; padding: 20px; margin: 10px 0; cursor: pointer; background-color: #fff; text-align: center; width: 80%; max-width: 300px; }
+    #upload-area.dragover { background-color: #e0e0e0; }
+    #preview-container { position: relative; width: 80vw; max-width: 300px; height: 80vw; max-height: 300px; border: 1px solid #000; background-color: #fff; }
+    #qr-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    #controls { margin: 10px 0; }
+    #download-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    #download-btn:hover { background-color: #0056b3; }
   </style>
 </head>
 <body>
@@ -124,16 +68,8 @@
       const file = event.target.files[0];
       if (file) loadLogo(file);
     });
-
-    uploadArea.addEventListener('dragover', (event) => {
-      event.preventDefault();
-      uploadArea.classList.add('dragover');
-    });
-
-    uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('dragover');
-    });
-
+    uploadArea.addEventListener('dragover', (event) => { event.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => { uploadArea.classList.remove('dragover'); });
     uploadArea.addEventListener('drop', (event) => {
       event.preventDefault();
       uploadArea.classList.remove('dragover');
@@ -148,21 +84,14 @@
           logoSVGCode = e.target.result;
           const blob = new Blob([logoSVGCode], { type: 'image/svg+xml' });
           logoImage.src = URL.createObjectURL(blob);
-          logoImage.onload = () => {
-            URL.revokeObjectURL(logoImage.src);
-            updateLogoBounds();
-            drawPreview();
-          };
+          logoImage.onload = () => { URL.revokeObjectURL(logoImage.src); updateLogoBounds(); drawPreview(); };
         };
         reader.readAsText(file);
       } else {
         reader.onload = (e) => {
           logoRasterDataURL = e.target.result;
           logoImage.src = logoRasterDataURL;
-          logoImage.onload = () => {
-            updateLogoBounds();
-            drawPreview();
-          };
+          logoImage.onload = () => { updateLogoBounds(); drawPreview(); };
         };
         reader.readAsDataURL(file);
       }
@@ -188,7 +117,6 @@
         drawPreview();
       }
     }
-
     qrText.addEventListener('input', generateQRCode);
     errorCorrection.addEventListener('change', generateQRCode);
     roundedCorners.addEventListener('change', drawPreview);
@@ -222,28 +150,22 @@
       qrCanvas.height = canvasSize;
       ctx.clearRect(0, 0, canvasSize, canvasSize);
 
-      // Draw logo
       if (logoImage.src) {
-        const x = logoBounds.x;
-        const y = logoBounds.y;
-        ctx.drawImage(logoImage, x, y, logoBounds.width, logoBounds.height);
+        ctx.drawImage(logoImage, logoBounds.x, logoBounds.y, logoBounds.width, logoBounds.height);
       }
 
-      // Draw QR code
       if (qrCode) {
         const n = qrCode.getModuleCount();
         const moduleSize = canvasSize / n;
         const scaledSize = moduleSize * 0.5;
         const offset = (moduleSize - scaledSize) / 2;
 
-        // Draw position patterns with rounded corners if enabled
         if (roundedCorners.checked) {
           drawPositionPatternCanvas(0, 0, moduleSize);
           drawPositionPatternCanvas(0, n - 7, moduleSize);
           drawPositionPatternCanvas(n - 7, 0, moduleSize);
         }
 
-        // Draw individual modules
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
             if (isPositionPattern(i, j, n) && roundedCorners.checked) continue;
@@ -256,13 +178,8 @@
               const centerX = x + moduleSize / 2;
               const centerY = y + moduleSize / 2;
               const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, moduleSize / 2);
-              if (qrCode.isDark(i, j)) {
-                gradient.addColorStop(0, 'rgba(0,0,0,0.5)');
-                gradient.addColorStop(1, 'black');
-              } else {
-                gradient.addColorStop(0, 'rgba(255,255,255,0.5)');
-                gradient.addColorStop(1, 'white');
-              }
+              gradient.addColorStop(0, qrCode.isDark(i, j) ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)');
+              gradient.addColorStop(1, qrCode.isDark(i, j) ? 'black' : 'white');
               ctx.fillStyle = gradient;
               ctx.fillRect(x + offset, y + offset, scaledSize, scaledSize);
             } else {
@@ -274,26 +191,18 @@
       }
     }
 
-    // Draw position pattern with rounded corners for canvas
     function drawPositionPatternCanvas(row, col, moduleSize) {
       const x = col * moduleSize;
       const y = row * moduleSize;
       const radius = moduleSize;
-
-      // Outer black
       ctx.fillStyle = 'black';
       drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, radius);
-
-      // Middle white
       ctx.fillStyle = 'white';
       drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, radius);
-
-      // Inner black
       ctx.fillStyle = 'black';
       drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, radius);
     }
 
-    // Helper to draw rounded rectangle in canvas
     function drawRoundedRect(ctx, x, y, width, height, radius) {
       ctx.beginPath();
       ctx.moveTo(x + radius, y);
@@ -309,12 +218,10 @@
       ctx.fill();
     }
 
-    // Identify position patterns
     function isPositionPattern(i, j, n) {
       return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
     }
 
-    // Identify functional modules
     function isFunctionalModule(i, j, n) {
       if ((i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7)) return true;
       if (i === 6 || j === 6) return true;
@@ -333,7 +240,7 @@
       URL.revokeObjectURL(url);
     });
 
-    // Generate SVG with correct position patterns and preserved SVG logo
+    // Generate SVG with corrected logo scaling
     function generateSVG() {
       if (!qrCode) return '';
       const n = qrCode.getModuleCount();
@@ -342,24 +249,22 @@
       const offset = (moduleSize - scaledSize) / 2;
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${n * moduleSize}" height="${n * moduleSize}" viewBox="0 0 ${n * moduleSize} ${n * moduleSize}">`;
 
-      // Add logo
-      if (logoSVGCode) {
+      // Add logo with correct scaling
+      if (logoSVGCode || logoRasterDataURL) {
         const canvasSize = previewContainer.clientWidth;
-        const svgLogoX = (logoBounds.x / canvasSize) * (n * moduleSize);
-        const svgLogoY = (logoBounds.y / canvasSize) * (n * moduleSize);
-        const svgLogoWidth = (logoBounds.width / canvasSize) * (n * moduleSize);
-        const svgLogoHeight = (logoBounds.height / canvasSize) * (n * moduleSize);
-        svg += `<svg x="${svgLogoX}" y="${svgLogoY}" width="${svgLogoWidth}" height="${svgLogoHeight}">${logoSVGCode}</svg>`;
-      } else if (logoRasterDataURL) {
-        const canvasSize = previewContainer.clientWidth;
-        const svgLogoX = (logoBounds.x / canvasSize) * (n * moduleSize);
-        const svgLogoY = (logoBounds.y / canvasSize) * (n * moduleSize);
-        const svgLogoWidth = (logoBounds.width / canvasSize) * (n * moduleSize);
-        const svgLogoHeight = (logoBounds.height / canvasSize) * (n * moduleSize);
-        svg += `<image href="${logoRasterDataURL}" x="${svgLogoX}" y="${svgLogoY}" width="${svgLogoWidth}" height="${svgLogoHeight}"/>`;
+        const svgScaleFactor = (n * moduleSize) / canvasSize;
+        const logoWidth = logoBounds.width * svgScaleFactor;
+        const logoHeight = logoBounds.height * svgScaleFactor;
+        const x = logoBounds.x * svgScaleFactor;
+        const y = logoBounds.y * svgScaleFactor;
+        if (logoSVGCode) {
+          const scaledLogoSVG = logoSVGCode.replace(/width="[^"]*"/, `width="${logoWidth}"`).replace(/height="[^"]*"/, `height="${logoHeight}"`);
+          svg += `<svg x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}">${scaledLogoSVG}</svg>`;
+        } else {
+          svg += `<image href="${logoRasterDataURL}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}"/>`;
+        }
       }
 
-      // Define gradients
       svg += `<defs>
         <radialGradient id="blackGradient" cx="0.5" cy="0.5" r="0.5">
           <stop offset="0%" stop-color="black" stop-opacity="0.5"/>
@@ -371,7 +276,6 @@
         </radialGradient>
       </defs>`;
 
-      // Draw position patterns with rounded corners if enabled
       if (roundedCorners.checked) {
         const radius = moduleSize;
         svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius);
@@ -379,7 +283,6 @@
         svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius);
       }
 
-      // Draw individual modules
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
           if (isPositionPattern(i, j, n) && roundedCorners.checked) continue;
@@ -403,28 +306,17 @@
       return svg;
     }
 
-    // Draw SVG rounded position pattern with white portions
     function drawSVGRoundedPositionPattern(row, col, moduleSize, radius) {
       const x = col * moduleSize;
       const y = row * moduleSize;
       let svg = '';
-      // Outer black
       svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
-      // Middle white
-      const whiteX = x + moduleSize;
-      const whiteY = y + moduleSize;
-      svg += `<rect x="${whiteX}" y="${whiteY}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${radius}" ry="${radius}"/>`;
-      // Inner black
-      const innerX = x + 2 * moduleSize;
-      const innerY = y + 2 * moduleSize;
-      svg += `<rect x="${innerX}" y="${innerY}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
+      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${radius}" ry="${radius}"/>`;
+      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
       return svg;
     }
 
-    // Redraw on resize
     window.addEventListener('resize', drawPreview);
-
-    // Initial draw
     generateQRCode();
   </script>
 </body>
