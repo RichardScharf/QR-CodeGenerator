@@ -15,8 +15,8 @@
     #qr-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     #controls { margin: 10px 0; }
     #brush-tool { margin-top: 10px; }
-    #download-btn, #brush-toggle, #undo-btn, #redo-btn, #brush-mode { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
-    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover, #brush-mode:hover { background-color: #0056b3; }
+    #download-btn, #brush-toggle, #undo-btn, #redo-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+    #download-btn:hover, #brush-toggle:hover, #undo-btn:hover, #redo-btn:hover { background-color: #0056b3; }
   </style>
 </head>
 <body>
@@ -36,15 +36,16 @@
         <option value="Q">Q (25%)</option>
         <option value="H">H (30%)</option>
       </select>
+      <label for="smooth-corners">Smooth Corners:</label>
+      <input type="checkbox" id="smooth-corners">
       <div id="brush-tool">
         <label for="brush-radius">Brush Radius:</label>
         <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
+        <label for="brush-strength">Strength (Min Size):</label>
+        <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
         <label for="brush-intensity">Intensity/Speed:</label>
         <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.03">
-        <label for="brush-transparency">Max Transparency:</label>
-        <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
         <button id="brush-toggle">Enable Brush</button>
-        <button id="brush-mode">Shrink Mode</button>
         <button id="undo-btn" disabled>Undo</button>
         <button id="redo-btn" disabled>Redo</button>
       </div>
@@ -59,11 +60,11 @@
     const logoUpload = document.getElementById('logo-upload');
     const scaleSlider = document.getElementById('scale-slider');
     const errorCorrection = document.getElementById('error-correction');
+    const smoothCorners = document.getElementById('smooth-corners');
     const brushRadius = document.getElementById('brush-radius');
+    const brushStrength = document.getElementById('brush-strength');
     const brushIntensity = document.getElementById('brush-intensity');
-    const brushTransparency = document.getElementById('brush-transparency');
     const brushToggle = document.getElementById('brush-toggle');
-    const brushModeBtn = document.getElementById('brush-mode');
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
     const previewContainer = document.getElementById('preview-container');
@@ -82,7 +83,6 @@
     let historyIndex = -1;
     let isBrushing = false;
     let brushEnabled = false;
-    let brushMode = 'shrink'; // 'shrink' or 'expand'
 
     // Handle logo upload
     uploadArea.addEventListener('click', () => logoUpload.click());
@@ -145,6 +145,7 @@
     }
     qrText.addEventListener('input', generateQRCode);
     errorCorrection.addEventListener('change', generateQRCode);
+    smoothCorners.addEventListener('change', drawPreview);
 
     // Update logo bounds
     function updateLogoBounds() {
@@ -163,7 +164,7 @@
       return brushedModules.get(moduleKey) || { scale: 1, transparency: 0 };
     }
 
-    // Draw preview with per-pixel transparency
+    // Draw preview with per-pixel transparency and smooth corners
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -178,8 +179,16 @@
         const n = qrCode.getModuleCount();
         const moduleSize = canvasSize / n;
 
+        // Draw position patterns if smooth corners are enabled
+        if (smoothCorners.checked) {
+          drawPositionPatternCanvas(0, 0, moduleSize);
+          drawPositionPatternCanvas(0, n - 7, moduleSize);
+          drawPositionPatternCanvas(n - 7, 0, moduleSize);
+        }
+
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
+            if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
             const { scale, transparency } = getModuleProperties(i, j);
             const size = moduleSize * scale;
             const offset = (moduleSize - size) / 2;
@@ -198,16 +207,42 @@
       }
     }
 
+    function drawPositionPatternCanvas(row, col, moduleSize) {
+      const x = col * moduleSize;
+      const y = row * moduleSize;
+      const radius = moduleSize * 0.75;
+      ctx.fillStyle = 'black';
+      drawRoundedRect(ctx, x, y, 7 * moduleSize, 7 * moduleSize, radius);
+      ctx.fillStyle = 'white';
+      drawRoundedRect(ctx, x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize, radius / 1.25);
+      ctx.fillStyle = 'black';
+      drawRoundedRect(ctx, x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize, radius / 2);
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.arcTo(x + width, y, x + width, y + radius, radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+      ctx.lineTo(x + radius, y + height);
+      ctx.arcTo(x, y + height, x, y + height - radius, radius);
+      ctx.lineTo(x, y + radius);
+      ctx.arcTo(x, y, x + radius, y, radius);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function isPositionPattern(i, j, n) {
+      return (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
+    }
+
     // Brush tool logic
     brushToggle.addEventListener('click', () => {
       brushEnabled = !brushEnabled;
       brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
       qrCanvas.style.cursor = brushEnabled ? 'crosshair' : 'default';
-    });
-
-    brushModeBtn.addEventListener('click', () => {
-      brushMode = brushMode === 'shrink' ? 'expand' : 'shrink';
-      brushModeBtn.textContent = brushMode === 'shrink' ? 'Shrink Mode' : 'Expand Mode';
     });
 
     qrCanvas.addEventListener('mousedown', (event) => {
@@ -237,9 +272,8 @@
       const y = (event.clientY - rect.top) / rect.height;
       const n = qrCode.getModuleCount();
       const radius = parseInt(brushRadius.value);
-      const baseIntensity = parseFloat(brushIntensity.value);
-      const intensity = baseIntensity * (21 / n); // Scale intensity: faster for small QR codes, slower for large ones
-      const maxTransparency = parseFloat(brushTransparency.value);
+      const intensity = parseFloat(brushIntensity.value);
+      const minScale = parseFloat(brushStrength.value);
       const centerJ = Math.floor(x * n);
       const centerI = Math.floor(y * n);
       const maxDist = radius * radius;
@@ -253,11 +287,11 @@
             if (dist <= maxDist) {
               const moduleKey = `${i},${j}`;
               const current = brushedModules.get(moduleKey) || { scale: 1, transparency: 0 };
-              const feather = 1 - (dist / maxDist); // Feathering effect
-              const scaleChange = intensity * feather * (brushMode === 'shrink' ? -1 : 1);
-              const transparencyChange = intensity * feather * (brushMode === 'shrink' ? 1 : -1);
-              const newScale = Math.min(1, Math.max(0.1, current.scale + scaleChange));
-              const newTransparency = Math.min(maxTransparency, Math.max(0, current.transparency + transparencyChange));
+              const feather = 1 - (dist / maxDist);
+              const scaleReduction = intensity * feather;
+              const newScale = Math.max(minScale, current.scale - scaleReduction);
+              const transparencyIncrease = (1 - newScale) * feather;
+              const newTransparency = Math.min(1, current.transparency + transparencyIncrease);
               brushedModules.set(moduleKey, { scale: newScale, transparency: newTransparency });
             }
           }
@@ -290,7 +324,7 @@
       redoBtn.disabled = historyIndex >= brushHistory.length - 1;
     }
 
-    // Download SVG with per-pixel transparency
+    // Download SVG with per-pixel transparency and smooth corners
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -324,8 +358,16 @@
         }
       }
 
+      if (smoothCorners.checked) {
+        const radius = moduleSize * 0.75;
+        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius);
+        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, radius);
+        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius);
+      }
+
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
+          if (smoothCorners.checked && isPositionPattern(i, j, n)) continue;
           const { scale, transparency } = getModuleProperties(i, j);
           const size = moduleSize * scale;
           const offset = (moduleSize - size) / 2;
@@ -341,6 +383,16 @@
         }
       }
       svg += '</svg>';
+      return svg;
+    }
+
+    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius) {
+      const x = col * moduleSize;
+      const y = row * moduleSize;
+      let svg = '';
+      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
+      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${radius / 1.25}" ry="${radius / 1.25}"/>`;
+      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${radius / 2}" ry="${radius / 2}"/>`;
       return svg;
     }
 
