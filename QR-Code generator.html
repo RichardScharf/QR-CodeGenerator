@@ -157,7 +157,7 @@
     // Check if a module is part of functional patterns
     function isFunctionalModule(i, j, n) {
       // Position patterns (3 orientation corners)
-      if ((i <= 7 && j <= 7) || (i <= 7 && j >= n-8) || (i >= n-8 && j <= 7)) {
+      if ((i <= 7 && j <= 7) || (i <= 7 && j >= n - 8) || (i >= n - 8 && j <= 7)) {
         return true;
       }
       // Timing patterns (lines between position patterns)
@@ -174,7 +174,7 @@
       return false;
     }
 
-    // Draw preview
+    // Draw preview with feathered data pixels
     function drawPreview() {
       const canvasSize = previewContainer.clientWidth;
       qrCanvas.width = canvasSize;
@@ -194,32 +194,39 @@
       if (qrCode) {
         const n = qrCode.getModuleCount();
         const moduleSize = canvasSize / n;
+        const scaledSize = moduleSize * 0.5;
+        const offset = (moduleSize - scaledSize) / 2;
+
+        // Calculate feather radius based on logo size
+        const logoArea = logoImage.src ? (logoImage.width * logoScale) * (logoImage.height * logoScale) : canvasSize * canvasSize;
+        const canvasArea = canvasSize * canvasSize;
+        const featherFactor = logoArea / canvasArea; // Ratio of logo to canvas area
+        const featherRadius = Math.min(moduleSize * 0.5, moduleSize * featherFactor * 0.75); // Cap at half module size
+
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
             const x = j * moduleSize;
             const y = i * moduleSize;
             if (isFunctionalModule(i, j, n)) {
-              // Functional modules: full size
-              if (qrCode.isDark(i, j)) {
-                ctx.fillStyle = 'black';
-                ctx.fillRect(x, y, moduleSize, moduleSize);
-              } else {
-                ctx.fillStyle = 'white';
-                ctx.fillRect(x, y, moduleSize, moduleSize);
-              }
+              // Functional modules: full size, no feathering
+              ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
+              ctx.fillRect(x, y, moduleSize, moduleSize);
             } else {
-              // Data modules
+              // Data modules: scaled with feathering
+              const centerX = x + moduleSize / 2;
+              const centerY = y + moduleSize / 2;
+              const gradient = ctx.createRadialGradient(
+                centerX, centerY, 0, centerX, centerY, featherRadius
+              );
               if (qrCode.isDark(i, j)) {
-                // Dark data module: 50% size, centered
-                const smallSize = moduleSize * 0.5;
-                const offset = (moduleSize - smallSize) / 2;
-                ctx.fillStyle = 'black';
-                ctx.fillRect(x + offset, y + offset, smallSize, smallSize);
+                gradient.addColorStop(0, 'black');
+                gradient.addColorStop(1, 'transparent');
               } else {
-                // Light data module: full-sized white square
-                ctx.fillStyle = 'white';
-                ctx.fillRect(x, y, moduleSize, moduleSize);
+                gradient.addColorStop(0, 'white');
+                gradient.addColorStop(1, 'transparent');
               }
+              ctx.fillStyle = gradient;
+              ctx.fillRect(x + offset, y + offset, scaledSize, scaledSize);
             }
           }
         }
