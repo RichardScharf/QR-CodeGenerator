@@ -16,6 +16,7 @@
     #controls { margin: 10px 0; }
     #download-btn { padding: 10px 20px; background-color: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
     #download-btn:hover { background-color: #0056b3; }
+    #brush-tool { margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -37,6 +38,11 @@
       </select>
       <label for="rounded-corners">Rounded Corners:</label>
       <input type="checkbox" id="rounded-corners">
+      <div id="brush-tool">
+        <label for="brush-radius">Brush Radius:</label>
+        <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
+        <button id="brush-toggle">Enable Brush</button>
+      </div>
     </div>
     <div id="preview-container">
       <canvas id="qr-canvas"></canvas>
@@ -52,6 +58,8 @@
     const previewContainer = document.getElementById('preview-container');
     const uploadArea = document.getElementById('upload-area');
     const downloadBtn = document.getElementById('download-btn');
+    const brushRadius = document.getElementById('brush-radius');
+    const brushToggle = document.getElementById('brush-toggle');
     const qrCanvas = document.getElementById('qr-canvas');
     const ctx = qrCanvas.getContext('2d');
 
@@ -60,7 +68,9 @@
     let qrCode = null;
     let logoBounds = null;
     let logoSVGCode = null;
-    let logoRasterDataURL = null;
+    let brushedModules = new Set();
+    let isBrushing = false;
+    let brushEnabled = false;
 
     // Handle logo upload
     uploadArea.addEventListener('click', () => logoUpload.click());
@@ -81,16 +91,18 @@
       const reader = new FileReader();
       if (file.type === 'image/svg+xml') {
         reader.onload = (e) => {
-          logoSVGCode = e.target.result;
-          const blob = new Blob([logoSVGCode], { type: 'image/svg+xml' });
+          let svgContent = e.target.result;
+          // Strip XML declaration and DOCTYPE from logo SVG
+          svgContent = svgContent.replace(/<\?xml[^>]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '');
+          logoSVGCode = svgContent;
+          const blob = new Blob([svgContent], { type: 'image/svg+xml' });
           logoImage.src = URL.createObjectURL(blob);
-          logoImage.onload = () => { URL.revokeObjectURL(logoImage.src); updateLogoBounds(); drawPreview(); };
+          logoImage.onload = () => { updateLogoBounds(); drawPreview(); };
         };
         reader.readAsText(file);
       } else {
         reader.onload = (e) => {
-          logoRasterDataURL = e.target.result;
-          logoImage.src = logoRasterDataURL;
+          logoImage.src = e.target.result;
           logoImage.onload = () => { updateLogoBounds(); drawPreview(); };
         };
         reader.readAsDataURL(file);
@@ -111,6 +123,7 @@
         qrCode = qrcode(0, ecLevel);
         qrCode.addData(qrText.value);
         qrCode.make();
+        brushedModules.clear();
         drawPreview();
       } else {
         qrCode = null;
@@ -132,15 +145,18 @@
       logoBounds = { x, y, width: logoWidth, height: logoHeight };
     }
 
-    // Check if module overlaps logo
-    function overlapsLogo(x, y, moduleSize) {
-      if (!logoBounds) return false;
-      return (
-        x + moduleSize > logoBounds.x &&
-        x < logoBounds.x + logoBounds.width &&
-        y + moduleSize > logoBounds.y &&
-        y < logoBounds.y + logoBounds.height
+    // Check if module overlaps logo or is brushed
+    function shouldShrinkModule(i, j, moduleSize, canvasSize) {
+      const moduleX = (j + 0.5) * moduleSize;
+      const moduleY = (i + 0.5) * moduleSize;
+      const brushed = brushedModules.has(`${i},${j}`);
+      const overlaps = logoBounds && (
+        moduleX > logoBounds.x &&
+        moduleX < logoBounds.x + logoBounds.width &&
+        moduleY > logoBounds.y &&
+        moduleY < logoBounds.y + logoBounds.height
       );
+      return brushed || overlaps;
     }
 
     // Draw preview
@@ -174,17 +190,13 @@
             if (isFunctionalModule(i, j, n)) {
               ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
               ctx.fillRect(x, y, moduleSize, moduleSize);
-            } else if (overlapsLogo(x, y, moduleSize)) {
-              const centerX = x + moduleSize / 2;
-              const centerY = y + moduleSize / 2;
-              const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, moduleSize / 2);
-              gradient.addColorStop(0, qrCode.isDark(i, j) ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)');
-              gradient.addColorStop(1, qrCode.isDark(i, j) ? 'black' : 'white');
-              ctx.fillStyle = gradient;
-              ctx.fillRect(x + offset, y + offset, scaledSize, scaledSize);
             } else {
+              const shouldShrink = shouldShrinkModule(i, j, moduleSize, canvasSize);
+              const size = shouldShrink ? scaledSize : moduleSize;
+              const posX = shouldShrink ? x + offset : x;
+              const posY = shouldShrink ? y + offset : y;
               ctx.fillStyle = qrCode.isDark(i, j) ? 'black' : 'white';
-              ctx.fillRect(x, y, moduleSize, moduleSize);
+              ctx.fillRect(posX, posY, size, size);
             }
           }
         }
@@ -228,6 +240,52 @@
       return false;
     }
 
+    // Brush tool logic
+    brushToggle.addEventListener('click', () => {
+      brushEnabled = !brushEnabled;
+      brushToggle.textContent = brushEnabled ? 'Disable Brush' : 'Enable Brush';
+      qrCanvas.style.cursor = brushEnabled ? 'crosshair' : 'default';
+    });
+
+    qrCanvas.addEventListener('mousedown', (event) => {
+      if (!brushEnabled || !qrCode) return;
+      isBrushing = true;
+      applyBrush(event);
+    });
+
+    qrCanvas.addEventListener('mousemove', (event) => {
+      if (!brushEnabled || !isBrushing || !qrCode) return;
+      applyBrush(event);
+    });
+
+    qrCanvas.addEventListener('mouseup', () => {
+      isBrushing = false;
+    });
+
+    function applyBrush(event) {
+      const rect = qrCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const canvasSize = previewContainer.clientWidth;
+      const n = qrCode.getModuleCount();
+      const moduleSize = canvasSize / n;
+      const radius = parseInt(brushRadius.value);
+      const centerJ = Math.floor(x / moduleSize);
+      const centerI = Math.floor(y / moduleSize);
+
+      for (let di = -radius; di <= radius; di++) {
+        for (let dj = -radius; dj <= radius; dj++) {
+          const i = centerI + di;
+          const j = centerJ + dj;
+          if (i >= 0 && i < n && j >= 0 && j < n && !isFunctionalModule(i, j, n)) {
+            const key = `${i},${j}`;
+            brushedModules.add(key);
+          }
+        }
+      }
+      drawPreview();
+    }
+
     // Download SVG
     downloadBtn.addEventListener('click', () => {
       const svg = generateSVG();
@@ -240,79 +298,44 @@
       URL.revokeObjectURL(url);
     });
 
-    // Generate SVG with corrected logo scaling
+    // Generate SVG without XML declaration issues
     function generateSVG() {
       if (!qrCode) return '';
       const n = qrCode.getModuleCount();
       const moduleSize = 10;
-      const scaledSize = moduleSize * 0.5;
-      const offset = (moduleSize - scaledSize) / 2;
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${n * moduleSize}" height="${n * moduleSize}" viewBox="0 0 ${n * moduleSize} ${n * moduleSize}">`;
 
-      // Add logo with correct scaling
-      if (logoSVGCode || logoRasterDataURL) {
+      // Add logo
+      if (logoSVGCode) {
         const canvasSize = previewContainer.clientWidth;
-        const svgScaleFactor = (n * moduleSize) / canvasSize;
-        const logoWidth = logoBounds.width * svgScaleFactor;
-        const logoHeight = logoBounds.height * svgScaleFactor;
-        const x = logoBounds.x * svgScaleFactor;
-        const y = logoBounds.y * svgScaleFactor;
-        if (logoSVGCode) {
-          const scaledLogoSVG = logoSVGCode.replace(/width="[^"]*"/, `width="${logoWidth}"`).replace(/height="[^"]*"/, `height="${logoHeight}"`);
-          svg += `<svg x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}">${scaledLogoSVG}</svg>`;
-        } else {
-          svg += `<image href="${logoRasterDataURL}" x="${x}" y="${y}" width="${logoWidth}" height="${logoHeight}"/>`;
-        }
+        const svgLogoX = (logoBounds.x / canvasSize) * (n * moduleSize);
+        const svgLogoY = (logoBounds.y / canvasSize) * (n * moduleSize);
+        const svgLogoWidth = (logoBounds.width / canvasSize) * (n * moduleSize);
+        const svgLogoHeight = (logoBounds.height / canvasSize) * (n * moduleSize);
+        svg += `<svg x="${svgLogoX}" y="${svgLogoY}" width="${svgLogoWidth}" height="${svgLogoHeight}">${logoSVGCode}</svg>`;
+      } else if (logoImage.src) {
+        const canvasSize = previewContainer.clientWidth;
+        const svgLogoX = (logoBounds.x / canvasSize) * (n * moduleSize);
+        const svgLogoY = (logoBounds.y / canvasSize) * (n * moduleSize);
+        const svgLogoWidth = (logoBounds.width / canvasSize) * (n * moduleSize);
+        const svgLogoHeight = (logoBounds.height / canvasSize) * (n * moduleSize);
+        svg += `<image href="${logoImage.src}" x="${svgLogoX}" y="${svgLogoY}" width="${svgLogoWidth}" height="${svgLogoHeight}"/>`;
       }
 
-      svg += `<defs>
-        <radialGradient id="blackGradient" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stop-color="black" stop-opacity="0.5"/>
-          <stop offset="100%" stop-color="black" stop-opacity="1"/>
-        </radialGradient>
-        <radialGradient id="whiteGradient" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stop-color="white" stop-opacity="0.5"/>
-          <stop offset="100%" stop-color="white" stop-opacity="1"/>
-        </radialGradient>
-      </defs>`;
-
-      if (roundedCorners.checked) {
-        const radius = moduleSize;
-        svg += drawSVGRoundedPositionPattern(0, 0, moduleSize, radius);
-        svg += drawSVGRoundedPositionPattern(0, n - 7, moduleSize, radius);
-        svg += drawSVGRoundedPositionPattern(n - 7, 0, moduleSize, radius);
-      }
-
+      // Draw QR code modules
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
-          if (isPositionPattern(i, j, n) && roundedCorners.checked) continue;
           const x = j * moduleSize;
           const y = i * moduleSize;
-          if (isFunctionalModule(i, j, n)) {
-            const fill = qrCode.isDark(i, j) ? 'black' : 'white';
-            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
-          } else if (overlapsLogo((j * moduleSize / (n * moduleSize)) * previewContainer.clientWidth, (i * moduleSize / (n * moduleSize)) * previewContainer.clientWidth, moduleSize / (n * moduleSize) * previewContainer.clientWidth)) {
-            const gradientId = qrCode.isDark(i, j) ? 'blackGradient' : 'whiteGradient';
-            const rectX = x + offset;
-            const rectY = y + offset;
-            svg += `<rect x="${rectX}" y="${rectY}" width="${scaledSize}" height="${scaledSize}" fill="url(#${gradientId})"/>`;
-          } else {
-            const fill = qrCode.isDark(i, j) ? 'black' : 'white';
-            svg += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="${fill}"/>`;
-          }
+          const shouldShrink = shouldShrinkModule(i, j, moduleSize, previewContainer.clientWidth);
+          const size = shouldShrink ? moduleSize * 0.5 : moduleSize;
+          const posX = shouldShrink ? x + (moduleSize - size) / 2 : x;
+          const posY = shouldShrink ? y + (moduleSize - size) / 2 : y;
+          const fill = qrCode.isDark(i, j) ? 'black' : 'white';
+          svg += `<rect x="${posX}" y="${posY}" width="${size}" height="${size}" fill="${fill}"/>`;
         }
       }
       svg += '</svg>';
-      return svg;
-    }
-
-    function drawSVGRoundedPositionPattern(row, col, moduleSize, radius) {
-      const x = col * moduleSize;
-      const y = row * moduleSize;
-      let svg = '';
-      svg += `<rect x="${x}" y="${y}" width="${7 * moduleSize}" height="${7 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
-      svg += `<rect x="${x + moduleSize}" y="${y + moduleSize}" width="${5 * moduleSize}" height="${5 * moduleSize}" fill="white" rx="${radius}" ry="${radius}"/>`;
-      svg += `<rect x="${x + 2 * moduleSize}" y="${y + 2 * moduleSize}" width="${3 * moduleSize}" height="${3 * moduleSize}" fill="black" rx="${radius}" ry="${radius}"/>`;
       return svg;
     }
 
