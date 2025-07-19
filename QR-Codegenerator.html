@@ -190,10 +190,6 @@
       <p>Drag or click to upload logo (PNG, JPG, SVG)</p>
       <input type="file" id="logo-upload" accept="image/*" style="display: none;">
     </div>
-    <div id="preview-container">
-      <canvas id="qr-canvas"></canvas>
-      <div id="brush-silhouette"></div>
-    </div>
     <div id="controls">
       <div class="section">
         <div class="section-title">QR Code Settings</div>
@@ -276,6 +272,10 @@
             <input type="checkbox" id="jitter-color">
             <label for="jitter-color">Jitter Color</label>
           </div>
+        </div>
+        <div id="preview-container">
+          <canvas id="qr-canvas"></canvas>
+          <div id="brush-silhouette"></div>
         </div>
         <div class="button-group">
           <button id="brush-toggle">Enable Brush</button>
@@ -620,8 +620,8 @@
 
       // Modified to accept sShift and lShift for stable jitter application
       applyColorJitter(baseColor, sShift, lShift) {
-        const [r, sg, sb] = hexToRgb(baseColor);
-        const [h, s, l] = rgbToHsl(sr, sg, sb);
+        const [r, g, b] = hexToRgb(baseColor);
+        const [h, s, l] = rgbToHsl(r, g, b);
         const newS = Math.max(0, Math.min(1, s + sShift));
         const newL = Math.max(0, Math.min(1, l + lShift));
         const [newR, newG, newB] = hslToRgb(h, newS, newL);
@@ -720,6 +720,7 @@
         this.elements.brushToggle.textContent = this.state.brushEnabled ? 'Disable Brush' : 'Enable Brush';
         this.elements.qrCanvas.style.cursor = this.state.brushEnabled ? 'crosshair' : 'default';
         this.elements.brushSilhouette.style.display = this.state.brushEnabled ? 'block' : 'none';
+        this.elements.qrText.disabled = this.state.brushEnabled;
       }
 
       handleMouseMove(event) {
