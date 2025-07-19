@@ -56,6 +56,7 @@
       border-radius: 8px;
       overflow: hidden;
       align-self: center;
+      margin: 20px auto;
     }
     #qr-canvas {
       width: 100%;
@@ -89,6 +90,16 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
+    }
+    .brush-control-grid {
+      display: flex;
+      gap: 20px;
+    }
+    .sliders, .checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 48%;
     }
     .control-group {
       display: flex;
@@ -129,6 +140,13 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+    .undo-redo {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
     .slider-value {
       font-size: 12px;
       color: #777;
@@ -156,9 +174,14 @@
         font-size: 14px;
         margin-bottom: 5px;
       }
-      .control-grid {
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      .control-grid, .brush-control-grid {
         gap: 5px;
+      }
+      .sliders, .checkboxes {
+        width: 100%;
+      }
+      .brush-control-grid {
+        flex-direction: column;
       }
       .control-group label {
         font-size: 12px;
@@ -227,55 +250,63 @@
       </div>
       <div class="section">
         <div class="section-title">Brush Tool</div>
-        <div class="control-grid">
-          <div class="control-group">
-            <label for="brush-radius">Brush Radius: <span class="slider-value" id="brush-radius-value">3</span></label>
-            <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
+        <div class="brush-control-grid">
+          <div class="sliders">
+            <div class="control-group">
+              <label for="brush-radius">Brush Radius: <span class="slider-value" id="brush-radius-value">3</span></label>
+              <input type="range" id="brush-radius" min="1" max="10" step="1" value="3">
+            </div>
+            <div class="control-group">
+              <label for="brush-strength">Strength (Min Size): <span class="slider-value" id="brush-strength-value">0.5</span></label>
+              <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
+            </div>
+            <div class="control-group">
+              <label for="brush-intensity">Sensitivity: <span class="slider-value" id="brush-intensity-value">0.05</span></label>
+              <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.05">
+            </div>
+            <div class="control-group">
+              <label for="brush-transparency">Max Transparency: <span class="slider-value" id="brush-transparency-value">0.5</span></label>
+              <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
+            </div>
+            <div class="control-group">
+              <label for="rotation-speed">Rotation Speed: <span class="slider-value" id="rotation-speed-value">0°</span></label>
+              <input type="range" id="rotation-speed" min="-0.5" max="0.5" step="0.05" value="0">
+            </div>
           </div>
-          <div class="control-group">
-            <label for="brush-strength">Strength (Min Size): <span class="slider-value" id="brush-strength-value">0.5</span></label>
-            <input type="range" id="brush-strength" min="0.1" max="1.0" step="0.1" value="0.5">
-          </div>
-          <div class="control-group">
-            <label for="brush-intensity">Sensitivity: <span class="slider-value" id="brush-intensity-value">0.05</span></label>
-            <input type="range" id="brush-intensity" min="0.01" max="0.1" step="0.01" value="0.05">
-          </div>
-          <div class="control-group">
-            <label for="brush-transparency">Max Transparency: <span class="slider-value" id="brush-transparency-value">0.5</span></label>
-            <input type="range" id="brush-transparency" min="0.0" max="1.0" step="0.1" value="0.5">
-          </div>
-          <div class="control-group">
-            <label for="rotation-speed">Rotation Speed: <span class="slider-value" id="rotation-speed-value">0°</span></label>
-            <input type="range" id="rotation-speed" min="-0.5" max="0.5" step="0.05" value="0">
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-scale">
-            <label for="lock-scale">Lock Scale</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-rotation">
-            <label for="lock-rotation">Lock Rotation</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="lock-transparency">
-            <label for="lock-transparency">Lock Transparency</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-scale">
-            <label for="jitter-scale">Jitter Scale</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-rotation">
-            <label for="jitter-rotation">Jitter Rotation</label>
-          </div>
-          <div class="control-group checkbox-group">
-            <input type="checkbox" id="jitter-color">
-            <label for="jitter-color">Jitter Color</label>
+          <div class="checkboxes">
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="lock-scale">
+              <label for="lock-scale">Lock Scale</label>
+            </div>
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="lock-rotation">
+              <label for="lock-rotation">Lock Rotation</label>
+            </div>
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="lock-transparency">
+              <label for="lock-transparency">Lock Transparency</label>
+            </div>
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="jitter-scale">
+              <label for="jitter-scale">Jitter Scale</label>
+            </div>
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="jitter-rotation">
+              <label for="jitter-rotation">Jitter Rotation</label>
+            </div>
+            <div class="control-group checkbox-group">
+              <input type="checkbox" id="jitter-color">
+              <label for="jitter-color">Jitter Color</label>
+            </div>
           </div>
         </div>
         <div id="preview-container">
           <canvas id="qr-canvas"></canvas>
           <div id="brush-silhouette"></div>
+        </div>
+        <div class="undo-redo">
+          <button id="undo-btn">Undo</button>
+          <button id="redo-btn">Redo</button>
         </div>
         <div class="button-group">
           <button id="brush-toggle">Enable Brush</button>
@@ -284,8 +315,6 @@
           <button id="reset-scale-btn">Reset Scale</button>
           <button id="reset-transparency-btn">Reset Transparency</button>
           <button id="reset-all-btn">Reset All</button>
-          <button id="undo-btn">Undo</button>
-          <button id="redo-btn">Redo</button>
         </div>
       </div>
     </div>
@@ -524,6 +553,17 @@
           }
         });
 
+        // Lock checkboxes
+        this.elements.lockScale.addEventListener('change', () => {
+          this.elements.brushStrength.disabled = this.elements.lockScale.checked;
+        });
+        this.elements.lockRotation.addEventListener('change', () => {
+          this.elements.rotationSpeed.disabled = this.elements.lockRotation.checked;
+        });
+        this.elements.lockTransparency.addEventListener('change', () => {
+          this.elements.brushTransparency.disabled = this.elements.lockTransparency.checked;
+        });
+
         // Reset buttons
         this.elements.resetRotationBtn.addEventListener('click', () => this.resetRotation());
         this.elements.resetColorsBtn.addEventListener('click', () => this.resetColors());
@@ -721,6 +761,7 @@
         this.elements.qrCanvas.style.cursor = this.state.brushEnabled ? 'crosshair' : 'default';
         this.elements.brushSilhouette.style.display = this.state.brushEnabled ? 'block' : 'none';
         this.elements.qrText.disabled = this.state.brushEnabled;
+        this.elements.errorCorrection.disabled = this.state.brushEnabled;
       }
 
       handleMouseMove(event) {
